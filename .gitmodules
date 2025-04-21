@@ -1,0 +1,3 @@
+[submodule "pixel_maps"]
+	path = pixel_maps
+	url = https://git.sr.ht/~grego/focus_pixel_maps

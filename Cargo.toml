@@ -1,0 +1,31 @@
+[package]
+name = "kinochrome"
+version = "0.1.0"
+edition = "2024"
+authors = ["Maroš Grego <maros@grego.site>"]
+description = "GPU accelerated raw video processing"
+repository = "https://git.sr.ht/~grego/kinochrome"
+
+[dependencies]
+ljpeg = { version = "0.1.2" }
+mlv = { version = "0.0.2", features = ["serde"] }
+dng = { git = "https://github.com/grego/dng-rs", branch = "read_compressed" }
+
+foldhash = "0.1.4"
+bytemuck = { version = "1.22", features = ["derive"] }
+vulkano = { version = "0.35", features = ["serde"] }
+winit = { version = "0.30", default-features = false, features = ["x11", "wayland", "wayland-dlopen", "rwh_06"] }
+egui = { version = "0.31", features = ["serde"] }
+egui-winit = { version = "0.31", default-features = false, features = ["x11", "wayland"] }
+egui-file-dialog = { version = "0.9", default-features = false }
+packbytes = "0.2"
+serde = { version = "1", features = ["derive", "rc"] }
+ciborium = "0.2.2"
+toml = "0.8.20"
+shlex = "1.3.0"
+
+[profile.dev]
+opt-level = 1 # ljpeg decoding is unusably slow otherwise
+debug = 0
+strip = "debuginfo"
+panic = "abort"

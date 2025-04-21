@@ -1,0 +1,24 @@
+name = "H.264"
+kind = "Video"
+args = "-c:v libx264 -pix_fmt yuv420p -tune film"
+
+[[params]]
+name = "Quality (crf)"
+type = "Int"
+arg = "-crf"
+min = 16
+max = 32
+default = 23
+
+[[params]]
+name = "Speed"
+type = "Discrete"
+arg = "-preset"
+options = [
+	["veryslow", "Very slow"],
+	["slow", "Slow"],
+	["medium", "Medium"],
+	["fast", "Fast"],
+	["veryfast", "Very fast"],
+]
+default = 2
