@@ -116,7 +116,7 @@ impl State {
             for item in items {
                 self.path_send
                     .send((item, false))
-                    .expect("Video parsing channel closed");
+                    .expect("Video parsing thread quit");
                 self.files_being_imported += 1;
             }
         } else if let Some(item) = self.import_dialog.take_picked() {
@@ -131,11 +131,24 @@ impl State {
         if let Some(item) = self.open_dialog.take_picked() {
             if self.open_dialog.mode() == DialogMode::SaveFile {
                 self.update_current_file();
-                let file = File::create(&item).unwrap();
-                ciborium::into_writer(&self.files, file).unwrap();
+                if let Err(e) = File::create(&item)
+                    .map_err(Into::into)
+                    .and_then(|f| ciborium::into_writer(&self.files, f))
+                {
+                    eprintln!("{e}");
+                }
             } else {
-                let file = File::open(&item).unwrap();
-                self.files = ciborium::from_reader(file).unwrap();
+                match File::open(&item)
+                    .map_err(Into::into)
+                    .and_then(ciborium::from_reader)
+                {
+                    Ok(files) => {
+                        self.files = files;
+                    }
+                    Err(e) => {
+                        eprintln!("{e}");
+                    }
+                }
                 for (_, file) in self.files.iter_mut() {
                     if let Some(ri) = file.raw_info {
                         file.focus_pixels =

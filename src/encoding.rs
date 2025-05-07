@@ -326,12 +326,14 @@ pub fn encode_cdngs(files: Vec<(String, VideoFile)>, state: Arc<Mutex<EncodingSt
     }
     for (name, mlv) in files {
         state.lock().unwrap().cur_file += 1;
-        encode_cdng(name, mlv, &state);
+        if let Err(e) = encode_cdng(name, mlv, &state) {
+            eprintln!("{e}");
+        }
     }
     state.lock().unwrap().running = false;
 }
 
-fn encode_cdng(mut name: String, video: VideoFile, state: &Mutex<EncodingState>) {
+fn encode_cdng(mut name: String, video: VideoFile, state: &Mutex<EncodingState>) -> Result<()> {
     let suffix = ".MLV";
     if name.ends_with(suffix) {
         name.truncate(name.len() - suffix.len());
@@ -345,10 +347,10 @@ fn encode_cdng(mut name: String, video: VideoFile, state: &Mutex<EncodingState>)
     );
 
     let mut vidframes = match video.frames {
-        Frames::Mlv(ref frames, _) => Frames::Mlv(frames.clone(), File::open(&video.path).unwrap()),
+        Frames::Mlv(ref frames, _) => Frames::Mlv(frames.clone(), File::open(&video.path)?),
         Frames::Dng(ref frames) => Frames::Dng(frames.clone()),
     };
-    fs::create_dir_all(&name).unwrap();
+    fs::create_dir_all(&name)?;
 
     let mut num_threads: usize = thread::available_parallelism()
         .unwrap_or(1.try_into().unwrap())
@@ -387,6 +389,7 @@ fn encode_cdng(mut name: String, video: VideoFile, state: &Mutex<EncodingState>)
         }
         drop(send);
     });
+    Ok(())
 }
 
 type EncData = (Vec<u8>, usize, [u16; 2]);

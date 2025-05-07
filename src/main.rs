@@ -520,7 +520,10 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         let rcx = self.rcx.as_mut().unwrap();
-        if rcx.redraw.advance() || self.state.redraw() {
+        if self.state.redraw() {
+            rcx.redraw = RedrawFrames::Two;
+        }
+        if rcx.redraw.advance() {
             rcx.window.request_redraw();
         }
     }

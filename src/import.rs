@@ -342,21 +342,22 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
     let mut fps = 24.0;
     let mut bits_per_pixel = 14;
     let mut compression = Compression::None(true);
+    let err = || io::Error::new(ErrorKind::Other, "incorrect IFD tag value type");
     let mut read_ifd = |ifd: &Ifd| {
         for entry in ifd.entries() {
             let tag = entry.tag.numeric();
             if tag == ifd::ImageWidth.tag {
-                width = entry.value.as_u32().unwrap() as usize;
+                width = entry.value.as_u32().ok_or_else(err)? as usize;
             } else if tag == ifd::ImageLength.tag {
-                height = entry.value.as_u32().unwrap() as usize;
+                height = entry.value.as_u32().ok_or_else(err)? as usize;
             } else if tag == ifd::FrameRate.tag {
-                fps = entry.value.as_f64().unwrap() as f32;
+                fps = entry.value.as_f64().ok_or_else(err)? as f32;
             } else if tag == ifd::BitsPerSample.tag {
                 if let Some(bpp) = entry.value.as_u32() {
                     bits_per_pixel = bpp as u8;
                 }
             } else if tag == ifd::Compression.tag {
-                match entry.value.as_u32().unwrap() {
+                match entry.value.as_u32().ok_or_else(err)? {
                     1 => {
                         compression = Compression::None(true);
                     }
@@ -367,16 +368,16 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
                 }
             } else if tag == ifd::CFAPattern.tag {
                 for (i, val) in entry.value.as_list().enumerate() {
-                    if val.as_u32().unwrap() == 0 {
+                    if val.as_u32().ok_or_else(err)? == 0 {
                         first_red = [(i % 2) as u16, (i / 2) as u16];
                         break;
                     }
                 }
             } else if tag == ifd::BlackLevel.tag {
-                black_level = entry.value.as_u32().unwrap() as f32 / ((1 << 16) - 1) as f32;
+                black_level = entry.value.as_u32().ok_or_else(err)? as f32 / ((1 << 16) - 1) as f32;
                 dbg!(black_level);
             } else if tag == ifd::WhiteLevel.tag {
-                white_level = entry.value.as_u32().unwrap() as f32 / ((1 << 16) - 1) as f32;
+                white_level = entry.value.as_u32().ok_or_else(err)? as f32 / ((1 << 16) - 1) as f32;
                 dbg!(white_level);
             } else if tag == ifd::ColorMatrix1.tag {
                 let cm: Vec<_> = entry
