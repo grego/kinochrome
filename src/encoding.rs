@@ -292,6 +292,7 @@ fn create_waw(name: &str, mlv: &VideoFile) -> Result<bool> {
 
     let mut audio_iter = mlv.audio_frames.iter();
     let Some(&AudioFrame { pos, len }) = audio_iter.next() else {
+        fs::remove_file(name)?;
         return Ok(false);
     };
     let mut start = 0;

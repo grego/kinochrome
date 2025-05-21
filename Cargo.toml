@@ -7,9 +7,9 @@ description = "GPU accelerated raw video processing"
 repository = "https://git.sr.ht/~grego/kinochrome"
 
 [dependencies]
-ljpeg = { version = "0.1.2" }
+ljpeg = "0.1.2"
 mlv = { version = "0.0.2", features = ["serde"] }
-dng = { git = "https://github.com/grego/dng-rs", branch = "read_compressed" }
+dng = "1.5.3"
 
 foldhash = "0.1.4"
 bytemuck = { version = "1.22", features = ["derive"] }
