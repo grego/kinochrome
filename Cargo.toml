@@ -7,22 +7,23 @@ description = "GPU accelerated raw video processing"
 repository = "https://git.sr.ht/~grego/kinochrome"
 
 [dependencies]
+# Crates connected to the Kinochrome project
 ljpeg = "0.1.2"
 mlv = { version = "0.0.2", features = ["serde"] }
 dng = "1.5.3"
+packbytes = "0.2"
 
-foldhash = "0.1.4"
-bytemuck = { version = "1.22", features = ["derive"] }
+bytemuck = { version = "1.23", features = ["derive"] }
 vulkano = { version = "0.35", features = ["serde"] }
 winit = { version = "0.30", default-features = false, features = ["x11", "wayland", "wayland-dlopen", "rwh_06"] }
 egui = { version = "0.31", features = ["serde"] }
 egui-winit = { version = "0.31", default-features = false, features = ["x11", "wayland"] }
-egui-file-dialog = { version = "0.9", default-features = false }
-packbytes = "0.2"
 serde = { version = "1", features = ["derive", "rc"] }
-ciborium = "0.2.2"
-toml = "0.8.20"
-shlex = "1.3.0"
+toml = "0.8"
+ciborium = "0.2"
+foldhash = "0.1"
+shlex = "1.3"
+egui-file-dialog = { version = "0.10", default-features = false }
 
 [profile.dev]
 opt-level = 1 # ljpeg decoding is unusably slow otherwise

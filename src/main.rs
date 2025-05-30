@@ -18,12 +18,8 @@ pub mod state;
 use encoding::EncodingDialog;
 use gpu_compute::{Compute, GpuContext};
 use import::{FocusPixelMap, parse_videos, read_frames};
-
-use renderer::*;
+use renderer::Renderer;
 use state::State;
-use winit::application::ApplicationHandler;
-use winit::event_loop::ActiveEventLoop;
-use winit::window::WindowId;
 
 use std::error::Error;
 use std::fs::File;
@@ -58,7 +54,10 @@ use vulkano::{
     },
     sync::{self, GpuFuture},
 };
-use winit::{event::WindowEvent, event_loop::EventLoop, window::Window};
+use winit::application::ApplicationHandler;
+use winit::event::WindowEvent;
+use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::window::{Window, WindowId};
 
 const RECIPE_DIR: &str = "recipes";
 
@@ -95,19 +94,8 @@ pub struct RenderingContext {
     previous_frame_end: Option<Box<dyn GpuFuture>>,
     /// The GUI renderer
     renderer: Renderer,
-    /// Do we want to redraw?
-    redraw: RedrawFrames,
-}
-
-/// How many frames should be redrawn
-/// Changes in egui sometimes take 2 frames
-pub enum RedrawFrames {
-    /// 0
-    Zero,
-    /// 1
-    One,
-    /// 2
-    Two,
+    /// How many frames do we want to redraw?
+    redraw_frames: u8,
 }
 
 /// Initialize the application and start it
@@ -410,7 +398,7 @@ impl ApplicationHandler for App {
             viewport,
             previous_frame_end,
             renderer,
-            redraw: RedrawFrames::Two,
+            redraw_frames: 2,
         })
     }
 
@@ -512,7 +500,7 @@ impl ApplicationHandler for App {
             event => {
                 // Update Egui integration so the UI works!
                 if rcx.renderer.update(&event) {
-                    rcx.redraw = RedrawFrames::Two;
+                    rcx.redraw_frames = 8;
                 }
             }
         }
@@ -521,28 +509,11 @@ impl ApplicationHandler for App {
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         let rcx = self.rcx.as_mut().unwrap();
         if self.state.redraw() {
-            rcx.redraw = RedrawFrames::Two;
+            rcx.redraw_frames = 8;
         }
-        if rcx.redraw.advance() {
+        if rcx.redraw_frames > 0 {
+            rcx.redraw_frames -= 1;
             rcx.window.request_redraw();
-        }
-    }
-}
-
-impl RedrawFrames {
-    /// Subtract one from the number of frames to be redrawn.
-    /// Return whether a redraw is needed.
-    pub fn advance(&mut self) -> bool {
-        match self {
-            Self::Two => {
-                *self = Self::One;
-                true
-            }
-            Self::One => {
-                *self = Self::Zero;
-                true
-            }
-            Self::Zero => false,
         }
     }
 }
