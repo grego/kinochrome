@@ -1,0 +1,134 @@
+name: release
+
+on:
+  push:
+    branches:
+      - master
+
+# We need this to be able to create releases.
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: build-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - build: linux-x86_64-gnu
+          os: ubuntu-latest
+          target: x86_64-unknown-linux-gnu
+        - build: linux-aarch64-gnu
+          os: ubuntu-24.04-arm
+          target: aarch64-unknown-linux-gnu
+        - build: macos-x86_64
+          os: macos-latest
+          target: x86_64-apple-darwin
+        - build: macos-aarch64
+          os: macos-latest
+          target: aarch64-apple-darwin
+        - build: windows-x86_64
+          os: windows-latest
+          target: x86_64-pc-windows-msvc
+        - build: windows-aarch64
+          os: windows-latest
+          target: aarch64-pc-windows-msvc
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Install packages (normal)
+      uses: amitie10g/install-package@v1
+      with:
+        brew: shaderc
+        apt: glslc
+        msystem: mingw64
+        update-msys2: true
+        pacman: make mingw-w64-x86_64-shaderc
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        target: ${{ matrix.target }}
+
+    - name: Compile shaders (Unix)
+      if: matrix.os != 'windows-latest'
+      shell: bash
+      run: |
+        make
+
+    - name: Compile shaders (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: msys2 {0}
+      run: |
+        make
+
+    - name: Set target variables
+      shell: bash
+      run: |
+        echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
+        echo "TARGET_DIR=./target/${{ matrix.target }}" >> $GITHUB_ENV
+
+    - name: Show command used for Cargo
+      shell: bash
+      run: |
+        echo "cargo command is: ${{ env.CARGO }}"
+        echo "target flag is: ${{ env.TARGET_FLAGS }}"
+        echo "target dir is: ${{ env.TARGET_DIR }}"
+
+    - name: Build release binary
+      shell: bash
+      run: |
+        cargo build --verbose --release ${{ env.TARGET_FLAGS }}
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          bin="target/${{ matrix.target }}/release/kinochrome.exe"
+        else
+          bin="target/${{ matrix.target }}/release/kinochrome"
+        fi
+        echo "BIN=$bin" >> $GITHUB_ENV
+
+    - name: Determine archive name
+      shell: bash
+      run: |
+        echo "ARCHIVE=kinochrome-nightly-${{ matrix.build }}" >> $GITHUB_ENV
+
+    - name: Creating directory for archive
+      shell: bash
+      run: |
+        mkdir -p "$ARCHIVE"
+        cp "$BIN" "$ARCHIVE"/
+        cp {README.md,LICENSE,logo.png} "$ARCHIVE"/
+        cp -r {pixel_maps,shaders} "$ARCHIVE"/
+
+    - name: Build archive (Windows)
+      shell: bash
+      if: matrix.os == 'windows-latest'
+      run: |
+        7z a "$ARCHIVE.zip" "$ARCHIVE"
+        certutil -hashfile "$ARCHIVE.zip" SHA256 > "$ARCHIVE.zip.sha256"
+        echo "ASSET=$ARCHIVE.zip" >> $GITHUB_ENV
+        echo "ASSET_SUM=$ARCHIVE.zip.sha256" >> $GITHUB_ENV
+
+    - name: Build archive (Unix)
+      shell: bash
+      if: matrix.os != 'windows-latest'
+      run: |
+        tar czf "$ARCHIVE.tar.gz" "$ARCHIVE"
+        shasum -a 256 "$ARCHIVE.tar.gz" > "$ARCHIVE.tar.gz.sha256"
+        echo "ASSET=$ARCHIVE.tar.gz" >> $GITHUB_ENV
+        echo "ASSET_SUM=$ARCHIVE.tar.gz.sha256" >> $GITHUB_ENV
+
+    - name: Upload release archive
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: bash
+      run: |
+        version="nightly"
+        gh release upload --clobber "$version" ${{ env.ASSET }} ${{ env.ASSET_SUM }}
+        gh release edit "$version" --latest --prerelease --target master

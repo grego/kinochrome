@@ -48,3 +48,7 @@ To run the application:
 ```
 cargo run --release
 ```
+
+# License
+AGPL-3.0
+[source code](https://git.sr.ht/~grego/kinochrome)
