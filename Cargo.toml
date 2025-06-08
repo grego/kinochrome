@@ -27,6 +27,10 @@ egui-file-dialog = { version = "0.10", default-features = false }
 
 [profile.dev]
 opt-level = 1 # ljpeg decoding is unusably slow otherwise
-debug = 0
 strip = "debuginfo"
 panic = "abort"
+
+[profile.release]
+panic = "abort"
+split-debuginfo = "packed"
+strip = "symbols"
