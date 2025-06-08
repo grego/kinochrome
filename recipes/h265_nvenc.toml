@@ -1,0 +1,15 @@
+name = "H.265 NVENC Lossless (Nvidia GPUs)"
+kind = "Video"
+args = "-c:v hevc_nvenc -preset lossless -tune lossless -rc:v constqp -qp:v 0 -b:v 0"
+
+[[params]]
+name = "Pixel format"
+type = "Discrete"
+arg = "-pix_fmt"
+options = [
+	["yuv444p16le", "10bit 4:4:4"],
+	["p0101e", "10bit 4:2:0"],
+	["yuv444p", "8bit 4:4:4"],
+	["yuv420p", "8bit 4:2:0"],
+]
+default = 0
