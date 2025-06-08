@@ -1,0 +1,3 @@
+name = "H.265 NVENC 10bit 4:2:0 Lossless(Nvidia GPUs)"
+kind = "Video"
+args = "-c:v hevc_nvenc -preset lossless -tune lossless -rc:v constqp -qp:v 0 -b:v 0 -pix_fmt p010le"
