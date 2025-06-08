@@ -8,7 +8,7 @@ type = "Discrete"
 arg = "-pix_fmt"
 options = [
 	["yuv444p16le", "10bit 4:4:4"],
-	["p0101e", "10bit 4:2:0"],
+	["p010le", "10bit 4:2:0"],
 	["yuv444p", "8bit 4:4:4"],
 	["yuv420p", "8bit 4:2:0"],
 ]
