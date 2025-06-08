@@ -104,7 +104,7 @@ jobs:
         mkdir -p "$ARCHIVE"
         cp "$BIN" "$ARCHIVE"/
         cp {README.md,LICENSE,logo.png} "$ARCHIVE"/
-        cp -r {pixel_maps,shaders} "$ARCHIVE"/
+        cp -r {pixel_maps,shaders,recipes} "$ARCHIVE"/
 
     - name: Build archive (Windows)
       shell: bash
