@@ -182,7 +182,7 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
     let (mut raw_w, mut raw_h) = (0, 0);
     let mut row_binning = 1;
     let mut camera = 0;
-    let bits_per_pixel = 14;
+    let mut bits_per_pixel = 14;
     let fps: f32 = header.fps.into();
 
     let mut video_start = 0;
@@ -208,7 +208,7 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
                 height = ri.res_y as usize;
                 raw_w = ri.width;
                 raw_h = ri.height;
-                //bits_per_pixel = ri.bits_per_pixel as u8;
+                bits_per_pixel = ri.bits_per_pixel as u8;
 
                 raw_info = Some(ri);
 
@@ -222,7 +222,7 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
                 camera = id.camera_model;
             }
             Header::RawCapture(rc) => {
-                row_binning = rc.binning_x;
+                row_binning = rc.binning_x / (1 + rc.skipping_y);
                 dbg!(rc);
             }
             Header::Exposure(exp) => {
@@ -817,10 +817,10 @@ fn unpack_bits<const BE: bool>(buffer: &[u8], bits: u8, out: &mut [u16]) {
         rem_bits = w & ((1 << rem) - 1);
         i += 1;
 
-        if rem == bits {
-            out[i] = rem_bits;
-            rem_bits = 0;
-            rem = 0;
+        if rem >= bits {
+            out[i] = rem_bits >> (rem - bits);
+            rem -= bits;
+            rem_bits = w & ((1 << rem) - 1);
             i += 1;
         }
     }
