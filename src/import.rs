@@ -174,7 +174,15 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
     let mut white_level = 1.0;
     let mut cam_matrix = identity_mat();
     let mut temperature = 6503;
-    let mut frames = Vec::with_capacity(header.video_frame_count as usize);
+    let frame_count = header.video_frame_count as usize;
+    let mut frames = vec![
+        MlvVideoFrame {
+            pos: 0,
+            len: 0,
+            pan: [0, 0]
+        };
+        header.video_frame_count as usize
+    ];
     let mut audio_frames = Vec::with_capacity(header.audio_frame_count as usize);
     let mut wav_info = None;
     let mut raw_info = None;
@@ -238,6 +246,10 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
                 if video_start == 0 {
                     video_start = timestamp;
                 }
+                let i = v.number as usize;
+                if i >= frame_count {
+                    continue;
+                }
                 let pan = [v.pan_x, v.pan_y];
                 let pos = frame.payload.start();
                 let len = frame.payload.length();
@@ -245,7 +257,7 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
                 if pos + frame.payload.full_length as u64 > filelen {
                     break;
                 }
-                frames.push(MlvVideoFrame { pos, len, pan });
+                frames[i] = MlvVideoFrame { pos, len, pan };
             }
             Header::Audio(_) => {
                 if audio_start == 0 {
@@ -263,6 +275,12 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
         }
 
         vidfile.seek(SeekFrom::Current(frame.payload.full_length as i64))?;
+    }
+
+    for i in 1..frame_count {
+        if frames[i].len == 0 {
+            frames[i] = frames[i - 1];
+        }
     }
 
     let stretch = 1.0 / (white_level - black_level);
@@ -806,7 +824,7 @@ fn show(bs: &[u8]) -> String {
 fn unpack_bits<const BE: bool>(buffer: &[u8], bits: u8, out: &mut [u16]) {
     let (mut rem, mut rem_bits) = (0, 0);
     let mut i = 0;
-    for c in buffer.chunks_exact(2) {
+    for c in buffer.chunks_exact(2).take(out.len() * bits as usize / 16) {
         let w = if BE {
             u16::from_be_bytes([c[0], c[1]])
         } else {
