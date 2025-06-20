@@ -376,14 +376,8 @@ impl Renderer {
     /// by choosing a swizzled linear format.
     fn choose_font_format(device: &vulkano::device::Device) -> Format {
         // Some portability subset devices are unable to swizzle views.
-        let supports_swizzle = !device
-            .physical_device()
-            .supported_extensions()
-            .khr_portability_subset
-            || device
-                .physical_device()
-                .supported_features()
-                .image_view_format_swizzle;
+        let supports_swizzle = !device.enabled_extensions().khr_portability_subset
+            || device.enabled_features().image_view_format_swizzle;
         // Check that this format is supported for all our uses:
         let is_supported = |device: &vulkano::device::Device, format: Format| {
             device

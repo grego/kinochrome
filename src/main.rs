@@ -39,8 +39,8 @@ use vulkano::{
     },
     descriptor_set::allocator::StandardDescriptorSetAllocator,
     device::{
-        Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags,
-        physical::PhysicalDeviceType,
+        Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, Queue, QueueCreateInfo,
+        QueueFlags, physical::PhysicalDeviceType,
     },
     format::Format,
     image::{Image, ImageUsage, view::ImageView},
@@ -142,6 +142,13 @@ fn main() -> Result<(), impl Error> {
             _ => 5,
         })
         .unwrap();
+    let swizzle = physical_device
+        .supported_features()
+        .image_view_format_swizzle;
+    let device_features = DeviceFeatures {
+        image_view_format_swizzle: swizzle,
+        ..DeviceFeatures::empty()
+    };
 
     println!(
         "Using device: {} (type: {:?})",
@@ -153,6 +160,7 @@ fn main() -> Result<(), impl Error> {
         physical_device,
         DeviceCreateInfo {
             enabled_extensions: device_extensions,
+            enabled_features: device_features,
             queue_create_infos: vec![QueueCreateInfo {
                 queue_family_index,
                 ..Default::default()
