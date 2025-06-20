@@ -237,25 +237,31 @@ pub fn layout(s: &mut State, ctx: &Context) {
 
         let response = ui
             .add(
-                Image::new(ImageSource::Texture(SizedTexture::new(image_id, [w, h]))).uv(
-                    Rect::from_center_size(Pos2::new(0.5, 0.5), Vec2::new(s.zoom, s.zoom)),
-                ),
+                Image::new(ImageSource::Texture(SizedTexture::new(image_id, [w, h])))
+                    .uv(Rect::from_center_size(s.center, Vec2::new(s.zoom, s.zoom))),
             )
             .interact(if s.picker_mode {
-                Sense::click()
+                Sense::CLICK | Sense::HOVER
             } else {
-                Sense::drag()
+                Sense::DRAG | Sense::HOVER
             });
+        let rect = response.interact_rect;
+        let hover_pos = response.hover_pos().map(|p| get_relative_pos(p, rect));
+        let origin: Pos2 = [0.5, 0.5].into();
         if response.clicked() {
-            if let Some(Pos2 { x, y }) = response.interact_pointer_pos() {
-                let r = response.interact_rect;
-                let x = ((x - r.min.x) / (r.max.x - r.min.x)).clamp(0.0, 1.0);
-                let y = ((y - r.min.y) / (r.max.y - r.min.y)).clamp(0.0, 1.0);
+            if let Some(pos) = response.interact_pointer_pos() {
                 if s.picker_mode {
+                    let Pos2 { x, y } = s.center + s.zoom * (get_relative_pos(pos, rect) - origin);
                     s.picked_point = Some([x, y]);
                 }
             }
         } else if response.dragged() {
+            let mut delta = response.drag_delta();
+            delta.x /= rect.width();
+            delta.y /= rect.height();
+            s.center -= delta * s.zoom;
+            let z = s.zoom / 2.0;
+            s.center = s.center.clamp([z, z].into(), [1.0 - z, 1.0 - z].into());
         }
 
         let zoom_unit: f32 = 1.05;
@@ -267,7 +273,16 @@ pub fn layout(s: &mut State, ctx: &Context) {
             })
         });
         if let Some(delta) = zoom_delta {
-            s.zoom = (s.zoom * delta).clamp(0.01, 1.0);
+            let old_zoom = s.zoom;
+            s.zoom = (s.zoom * delta).clamp(0.05, 1.0);
+            if let Some(hp) = hover_pos {
+                let shift = Pos2::default() - s.center;
+                let old = (hp - origin.to_vec2()) * old_zoom + shift;
+                let new = (hp - origin.to_vec2()) * s.zoom + shift;
+                s.center += old - new;
+                let z = s.zoom / 2.0;
+                s.center = s.center.clamp([z, z].into(), [1.0 - z, 1.0 - z].into());
+            }
         }
     });
 
@@ -380,6 +395,17 @@ pub fn layout(s: &mut State, ctx: &Context) {
     if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Z)) {
         s.undo();
     }
+
+    if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Plus)) {
+        s.zoom = (s.zoom / 1.1).clamp(0.05, 1.0);
+    }
+    if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Minus)) {
+        s.zoom = (s.zoom * 1.1).clamp(0.05, 1.0);
+    }
+    if ctx.input_mut(|i| i.key_pressed(Key::R)) {
+        s.zoom = 1.0;
+        s.center = [0.5, 0.5].into();
+    }
 }
 
 /// A form for displaying and modifying the ffmpeg encoding parameters
@@ -442,4 +468,11 @@ fn color_rect(ui: &mut Ui, color: Color32) -> Response {
     }
 
     response
+}
+
+/// Get position of an event relative to an interact rectangle
+fn get_relative_pos(Pos2 { x, y }: Pos2, r: Rect) -> Pos2 {
+    let x = ((x - r.min.x) / r.width()).clamp(0.0, 1.0);
+    let y = ((y - r.min.y) / r.height()).clamp(0.0, 1.0);
+    Pos2 { x, y }
 }

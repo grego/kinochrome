@@ -5,8 +5,8 @@ use crate::gui;
 use crate::import::{FocusPixelMap, VideoCommand, VideoFile, load_focus_pixels};
 use crate::renderer::Renderer;
 
-use egui::TextureId;
 use egui::util::undoer::Undoer;
+use egui::{Pos2, TextureId};
 use egui_file_dialog::{DialogMode, FileDialog};
 use vulkano::buffer::Subbuffer;
 use vulkano::image::sampler::{Filter, SamplerCreateInfo};
@@ -110,6 +110,8 @@ pub struct State {
 
     /// How far is the image zoomed?
     pub zoom: f32,
+    /// Center of the image in the zoom
+    pub center: Pos2,
 }
 
 impl State {

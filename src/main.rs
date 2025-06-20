@@ -294,6 +294,7 @@ fn main() -> Result<(), impl Error> {
         picked_point: None,
 
         zoom: 1.0,
+        center: [0.5, 0.5].into(),
     };
 
     let mut app = App {
