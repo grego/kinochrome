@@ -4,9 +4,9 @@ use crate::state::State;
 
 use egui::load::SizedTexture;
 use egui::{
-    Button, CentralPanel, Color32, ComboBox, Context, CursorIcon, DragValue, Id, ImageSource, Key,
-    Modifiers, Pos2, ProgressBar, Response, Rgba, ScrollArea, SelectableLabel, Sense, SidePanel,
-    Slider, TopBottomPanel, Ui, Window, menu, style,
+    Button, CentralPanel, Color32, ComboBox, Context, CursorIcon, DragValue, Event, Id, Image,
+    ImageSource, Key, Modifiers, Pos2, ProgressBar, Rect, Response, Rgba, ScrollArea,
+    SelectableLabel, Sense, SidePanel, Slider, TopBottomPanel, Ui, Vec2, Window, menu, style,
 };
 
 use std::f32::consts::PI;
@@ -236,15 +236,38 @@ pub fn layout(s: &mut State, ctx: &Context) {
         };
 
         let response = ui
-            .image(ImageSource::Texture(SizedTexture::new(image_id, [w, h])))
-            .interact(Sense::click());
-        if let Some(Pos2 { x, y }) = response.interact_pointer_pos() {
-            let r = response.interact_rect;
-            let x = ((x - r.min.x) / (r.max.x - r.min.x)).clamp(0.0, 1.0);
-            let y = ((y - r.min.y) / (r.max.y - r.min.y)).clamp(0.0, 1.0);
-            if s.picker_mode {
-                s.picked_point = Some([x, y]);
+            .add(
+                Image::new(ImageSource::Texture(SizedTexture::new(image_id, [w, h]))).uv(
+                    Rect::from_center_size(Pos2::new(0.5, 0.5), Vec2::new(s.zoom, s.zoom)),
+                ),
+            )
+            .interact(if s.picker_mode {
+                Sense::click()
+            } else {
+                Sense::drag()
+            });
+        if response.clicked() {
+            if let Some(Pos2 { x, y }) = response.interact_pointer_pos() {
+                let r = response.interact_rect;
+                let x = ((x - r.min.x) / (r.max.x - r.min.x)).clamp(0.0, 1.0);
+                let y = ((y - r.min.y) / (r.max.y - r.min.y)).clamp(0.0, 1.0);
+                if s.picker_mode {
+                    s.picked_point = Some([x, y]);
+                }
             }
+        } else if response.dragged() {
+        }
+
+        let zoom_unit: f32 = 1.05;
+        let zoom_delta = ui.input(|i| {
+            i.events.iter().find_map(|e| match e {
+                Event::MouseWheel { delta, .. } => Some(zoom_unit.powf(-delta.y)),
+                Event::Zoom(delta) => Some(*delta),
+                _ => None,
+            })
+        });
+        if let Some(delta) = zoom_delta {
+            s.zoom = (s.zoom * delta).clamp(0.01, 1.0);
         }
     });
 

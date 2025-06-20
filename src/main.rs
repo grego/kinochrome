@@ -292,6 +292,8 @@ fn main() -> Result<(), impl Error> {
         about_dialog_shown: false,
         picker_mode: false,
         picked_point: None,
+
+        zoom: 1.0,
     };
 
     let mut app = App {

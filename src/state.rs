@@ -107,6 +107,9 @@ pub struct State {
     pub picker_mode: bool,
     /// Coordinates of a point picked by the color picker
     pub picked_point: Option<[f32; 2]>,
+
+    /// How far is the image zoomed?
+    pub zoom: f32,
 }
 
 impl State {
