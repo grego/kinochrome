@@ -24,6 +24,10 @@ pub struct ColorParams {
     pub cam_matrix: Mat<3>,
     /// Illuminant - the light source
     pub illuminant: Illuminant,
+    /// Global saturation
+    pub saturation_global: f32,
+    /// Is video intended to be monochromatic?
+    pub monochrome: bool,
 }
 
 /// Color of the light source
@@ -44,6 +48,8 @@ impl Default for ColorParams {
         ColorParams {
             cam_matrix: identity_mat(),
             illuminant: Illuminant::D(6500),
+            saturation_global: 0.0,
+            monochrome: false,
         }
     }
 }
@@ -53,6 +59,11 @@ impl ColorParams {
     pub fn set_push_constants(&self, pc: &PushConstantData) -> PushConstantData {
         let mut pc = *pc;
         pc.cam_matrix = self.adaptation_matrix().map(Padded);
+        if self.monochrome {
+            pc.saturation_global = f32::NAN;
+        } else {
+            pc.saturation_global = self.saturation_global;
+        }
         pc
     }
 
@@ -60,6 +71,11 @@ impl ColorParams {
     pub fn update_push_constants(&self, prev: &Self, pc: &mut PushConstantData) {
         if self.illuminant != prev.illuminant {
             pc.cam_matrix = self.adaptation_matrix().map(Padded);
+        }
+        if self.monochrome {
+            pc.saturation_global = f32::NAN;
+        } else {
+            pc.saturation_global = self.saturation_global;
         }
     }
 

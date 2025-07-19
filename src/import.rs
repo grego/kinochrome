@@ -292,6 +292,7 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
     let color_params = ColorParams {
         cam_matrix,
         illuminant: Illuminant::D(temperature),
+        ..Default::default()
     };
     let pc = color_params.set_push_constants(&Default::default());
 
@@ -360,7 +361,7 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
     let mut fps = 24.0;
     let mut bits_per_pixel = 14;
     let mut compression = Compression::None(true);
-    let err = || io::Error::new(ErrorKind::Other, "incorrect IFD tag value type");
+    let err = || io::Error::other("incorrect IFD tag value type");
     let mut read_ifd = |ifd: &Ifd| {
         for entry in ifd.entries() {
             let tag = entry.tag.numeric();

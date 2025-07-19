@@ -155,26 +155,29 @@ pub fn layout(s: &mut State, ctx: &Context) {
             ui.separator();
 
             ui.heading("saturation");
-            ui.add(
-                Slider::new(&mut s.pc.saturation_global, -0.5..=0.5)
-                    .text("global")
-                    .step_by(0.01),
-            );
-            ui.add(
-                Slider::new(&mut s.pc.saturation_shd, -0.5..=0.5)
-                    .text("shadows")
-                    .step_by(0.01),
-            );
-            ui.add(
-                Slider::new(&mut s.pc.saturation_mid, -0.5..=0.5)
-                    .text("midtones")
-                    .step_by(0.01),
-            );
-            ui.add(
-                Slider::new(&mut s.pc.saturation_hig, -0.5..=0.5)
-                    .text("highlights")
-                    .step_by(0.01),
-            );
+            ui.add_enabled_ui(!s.color_params.monochrome, |ui| {
+                ui.add(
+                    Slider::new(&mut s.color_params.saturation_global, -0.5..=0.5)
+                        .text("global")
+                        .step_by(0.01),
+                );
+                ui.add(
+                    Slider::new(&mut s.pc.saturation_shd, -0.5..=0.5)
+                        .text("shadows")
+                        .step_by(0.01),
+                );
+                ui.add(
+                    Slider::new(&mut s.pc.saturation_mid, -0.5..=0.5)
+                        .text("midtones")
+                        .step_by(0.01),
+                );
+                ui.add(
+                    Slider::new(&mut s.pc.saturation_hig, -0.5..=0.5)
+                        .text("highlights")
+                        .step_by(0.01),
+                );
+            });
+            ui.checkbox(&mut s.color_params.monochrome, "Monochromatic");
             ui.separator();
 
             ui.heading("tone mapping");

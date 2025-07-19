@@ -79,16 +79,20 @@ void main() {
 	vec3 col_xyz = params.cam_matrix * c_cam;
 	col_xyz *= pow(2.0, params.exposure);
 
-	const vec3 jch = xyY_to_dt_UCS_JCH(XYZ_to_xyY(col_xyz), 1.0);
-	const vec3 opacity = opacity_masks(jch.x, 1.0, 1.0, 1.0, 0.1845);
-	vec3 hcb = dt_UCS_JCH_to_HCB(jch);
-	const vec2 sincos = normalize(hcb.yz);
-	const vec3 saturation_local = vec3(params.saturation_shd, params.saturation_mid, params.saturation_hig);
-	const float a = params.saturation_global + dot(saturation_local, opacity);
-	const vec2 pw = vec2(a * hcb.y, sincos.x * hcb.y + sincos.y * hcb.z);
-	const mat2 inv = mat2(sincos.y, -sincos.x, sincos);
-	const vec3 jchnew = dt_UCS_HCB_to_JCH(vec3(hcb.x, inv * pw));
-	const vec3 col0 = xyz_to_rec2020 * xyY_to_XYZ(dt_UCS_JCH_to_xyY(jchnew, 1.0));
+	vec3 jch = xyY_to_dt_UCS_JCH(XYZ_to_xyY(col_xyz), 1.0);
+	if (isnan(params.saturation_global)) {
+ 		jch.y = 0.0;
+ 	} else {
+		const vec3 opacity = opacity_masks(jch.x, 1.0, 1.0, 1.0, 0.1845);
+		vec3 hcb = dt_UCS_JCH_to_HCB(jch);
+    		const vec2 sincos = normalize(hcb.yz);
+		const vec3 saturation_local = vec3(params.saturation_shd, params.saturation_mid, params.saturation_hig);
+		const float a = params.saturation_global + dot(saturation_local, opacity);
+		const vec2 pw = vec2(a * hcb.y, sincos.x * hcb.y + sincos.y * hcb.z);
+		const mat2 inv = mat2(sincos.y, -sincos.x, sincos);
+		jch = dt_UCS_HCB_to_JCH(vec3(hcb.x, inv * pw));
+ 	}
+	const vec3 col0 = xyz_to_rec2020 * xyY_to_XYZ(dt_UCS_JCH_to_xyY(jch, 1.0));
 	//const vec3 col0 = xyz_to_rec2020 * col_xyz;
 
 	//float norm = max(max(col0.r, col0.g), col0.b);
