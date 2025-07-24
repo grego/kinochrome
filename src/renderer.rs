@@ -34,10 +34,7 @@ use vulkano::{
     image::{
         Image, ImageAspects, ImageCreateInfo, ImageLayout, ImageSubresourceLayers, ImageType,
         ImageUsage, SampleCount,
-        sampler::{
-            ComponentMapping, ComponentSwizzle, Filter, Sampler, SamplerAddressMode,
-            SamplerCreateInfo, SamplerMipmapMode,
-        },
+        sampler::{Filter, Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode},
         view::{ImageView, ImageViewCreateInfo},
     },
     memory::{
@@ -90,8 +87,6 @@ pub struct Renderer {
     render_pass: Arc<RenderPass>,
 
     font_sampler: Arc<Sampler>,
-    // May be R8G8_UNORM or R8G8B8A8_SRGB
-    font_format: Format,
 
     memory_alloc: Arc<StandardMemoryAllocator>,
     descriptor_set_alloc: Arc<dyn DescriptorSetAllocator>,
@@ -182,7 +177,6 @@ impl Renderer {
             },
         )
         .unwrap();
-        let font_format = Self::choose_font_format(gfx_queue.device());
 
         let max_texture_side = gfx_queue
             .device()
@@ -213,7 +207,6 @@ impl Renderer {
             texture_images: HashMap::default(),
             next_native_tex_id: 0,
             font_sampler,
-            font_format,
             memory_alloc,
             descriptor_set_alloc,
             command_buffer_alloc,
@@ -372,81 +365,11 @@ impl Renderer {
         self.texture_images.remove(&texture_id);
     }
 
-    /// Choose a font format, attempt to minimize memory footprint and CPU unpacking time
-    /// by choosing a swizzled linear format.
-    fn choose_font_format(device: &vulkano::device::Device) -> Format {
-        // Some portability subset devices are unable to swizzle views.
-        let supports_swizzle = !device.enabled_extensions().khr_portability_subset
-            || device.enabled_features().image_view_format_swizzle;
-        // Check that this format is supported for all our uses:
-        let is_supported = |device: &vulkano::device::Device, format: Format| {
-            device
-                .physical_device()
-                .image_format_properties(vulkano::image::ImageFormatInfo {
-                    format,
-                    usage: ImageUsage::SAMPLED
-                        | ImageUsage::TRANSFER_DST
-                        | ImageUsage::TRANSFER_SRC,
-                    ..Default::default()
-                })
-                // Ok(Some(..)) is supported format for this usage.
-                .is_ok_and(|properties| properties.is_some())
-        };
-        if supports_swizzle && is_supported(device, Format::R8G8_UNORM) {
-            // We can save mem by swizzling in hardware!
-            Format::R8G8_UNORM
-        } else {
-            // Rest of implementation assumes R8G8B8A8_SRGB anyway!
-            Format::R8G8B8A8_SRGB
-        }
-    }
-
-    /// Based on self.font_format, extract into bytes.
-    fn pack_font_data_into(&self, data: &egui::FontImage, into: &mut [u8]) {
-        match self.font_format {
-            Format::R8G8_UNORM => {
-                // Egui expects RGB to be linear in shader, but alpha to be *nonlinear.*
-                // Thus, we use R channel for linear coverage, G for the same coverage converted to nonlinear.
-                // Then gets swizzled up to RRRG to match expected values.
-                let linear = data
-                    .pixels
-                    .iter()
-                    .map(|f| (f.clamp(0.0, 1.0 - f32::EPSILON) * 256.0) as u8);
-                let bytes = linear
-                    .zip(data.srgba_pixels(None))
-                    .flat_map(|(linear, srgb)| [linear, srgb.a()]);
-
-                into.iter_mut()
-                    .zip(bytes)
-                    .for_each(|(into, from)| *into = from);
-            }
-            Format::R8G8B8A8_SRGB => {
-                // No special tricks, pack them directly.
-                let bytes = data.srgba_pixels(None).flat_map(|color| color.to_array());
-                into.iter_mut()
-                    .zip(bytes)
-                    .for_each(|(into, from)| *into = from);
-            }
-            // This is the exhaustive list of choosable font formats.
-            _ => unreachable!(),
-        }
-    }
-
     fn image_size_bytes(&self, delta: &egui::epaint::ImageDelta) -> usize {
         match &delta.image {
             egui::ImageData::Color(c) => {
                 // Always four bytes per pixel for sRGBA
                 c.width() * c.height() * 4
-            }
-            egui::ImageData::Font(f) => {
-                f.width()
-                    * f.height()
-                    * match self.font_format {
-                        Format::R8G8_UNORM => 2,
-                        Format::R8G8B8A8_SRGB => 4,
-                        // Exhaustive list of valid font formats
-                        _ => unreachable!(),
-                    }
             }
         }
     }
@@ -474,11 +397,6 @@ impl Renderer {
                     .zip(bytes)
                     .for_each(|(into, from)| *into = from);
                 Format::R8G8B8A8_SRGB
-            }
-            egui::ImageData::Font(image) => {
-                // Dynamically pack based on chosen format
-                self.pack_font_data_into(image, mapped_stage);
-                self.font_format
             }
         };
 
@@ -530,20 +448,9 @@ impl Renderer {
             // Defer upload of data
             cbb.copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(stage, img.clone()))
                 .unwrap();
-            // Swizzle packed font images up to a full premul white.
-            let component_mapping = match format {
-                Format::R8G8_UNORM => ComponentMapping {
-                    r: ComponentSwizzle::Red,
-                    g: ComponentSwizzle::Red,
-                    b: ComponentSwizzle::Red,
-                    a: ComponentSwizzle::Green,
-                },
-                _ => ComponentMapping::identity(),
-            };
             let view = ImageView::new(
                 img.clone(),
                 ImageViewCreateInfo {
-                    component_mapping,
                     ..ImageViewCreateInfo::from_image(&img)
                 },
             )

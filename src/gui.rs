@@ -5,8 +5,8 @@ use crate::state::State;
 use egui::load::SizedTexture;
 use egui::{
     Button, CentralPanel, Color32, ComboBox, Context, CursorIcon, DragValue, Event, Id, Image,
-    ImageSource, Key, Modifiers, Pos2, ProgressBar, Rect, Response, Rgba, ScrollArea,
-    SelectableLabel, Sense, SidePanel, Slider, TopBottomPanel, Ui, Vec2, Window, menu, style,
+    ImageSource, Key, MenuBar, Modifiers, Pos2, ProgressBar, Rect, Response, Rgba, ScrollArea,
+    Sense, SidePanel, Slider, TopBottomPanel, Ui, Vec2, Window, style,
 };
 
 use std::f32::consts::PI;
@@ -15,7 +15,7 @@ use std::time::Instant;
 /// GUI layout
 pub fn layout(s: &mut State, ctx: &Context) {
     TopBottomPanel::top("top panel").show(ctx, |ui| {
-        menu::bar(ui, |ui| {
+        MenuBar::new().ui(ui, |ui| {
             ui.menu_button("File", |ui| {
                 if ui.button("Open").clicked() {
                     s.open_dialog.pick_file();
@@ -59,7 +59,7 @@ pub fn layout(s: &mut State, ctx: &Context) {
             let mut last_selected = 0;
             let mut select_range = None;
             for (i, (filename, video)) in s.files.iter_mut().enumerate() {
-                let flabel = ui.add(SelectableLabel::new(video.selected, filename));
+                let flabel = ui.add(Button::selectable(video.selected, filename));
 
                 if flabel.clicked() {
                     if ui.input(|i| i.modifiers.shift) {
