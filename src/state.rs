@@ -41,6 +41,9 @@ pub struct State {
     pub undo_color_params: Undoer<ColorParams>,
     /// Current push constant data
     pub pc: PushConstantData,
+    /// Push constant data from the previous frame.
+    /// Needed to determine whether a redraw is necessary
+    pub prev_pc: PushConstantData,
     /// Previous push constant data
     pub undo_pc: Undoer<PushConstantData>,
     /// GPU compute operation
@@ -237,7 +240,7 @@ impl State {
 
         if self.paused
             && !self.compute.is_computing()
-            && (self.undo_pc.has_undo(&self.pc) || self.recompute)
+            && (self.pc != self.prev_pc || self.recompute)
         {
             let upload_buffer = if self.rewound_frame {
                 loop {
@@ -276,13 +279,14 @@ impl State {
             }
         }
 
+        self.prev_pc = self.pc;
         self.color_params
             .update_push_constants(&self.prev_color_params, &mut self.pc);
         self.prev_color_params = self.color_params;
 
         let time = self.first_start.elapsed().as_millis() as f64 / 1000.0;
         self.undo_color_params.feed_state(time, &self.color_params);
-        self.undo_pc.feed_state(time, &self.pc);
+        self.undo_pc.add_undo(&self.pc);
 
         if let Some(new_file) = self.changed_file.take() {
             self.update_current_file();

@@ -80,7 +80,7 @@ void main() {
 	col_xyz *= pow(2.0, params.exposure);
 
 	vec3 jch = xyY_to_dt_UCS_JCH(XYZ_to_xyY(col_xyz), 1.0);
-	if (isnan(params.saturation_global)) {
+	if (isinf(params.saturation_global)) {
  		jch.y = 0.0;
  	} else {
 		const vec3 opacity = opacity_masks(jch.x, 1.0, 1.0, 1.0, 0.1845);

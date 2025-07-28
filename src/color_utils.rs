@@ -1,3 +1,4 @@
+use core::f32;
 use std::array;
 
 use serde::{Deserialize, Serialize};
@@ -73,7 +74,7 @@ impl ColorParams {
             pc.cam_matrix = self.adaptation_matrix().map(Padded);
         }
         if self.monochrome {
-            pc.saturation_global = f32::NAN;
+            pc.saturation_global = f32::NEG_INFINITY;
         } else {
             pc.saturation_global = self.saturation_global;
         }

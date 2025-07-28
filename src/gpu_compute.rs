@@ -42,7 +42,7 @@ type ComputeFuture = FenceSignalFuture<CommandBufferExecFuture<NowFuture>>;
 
 /// Push constants for the compute shader
 #[repr(C)]
-#[derive(BufferContents, Clone, Copy, PartialEq, Deserialize, Serialize)]
+#[derive(BufferContents, Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]
 pub struct PushConstantData {
     /// Camera color matrix
     pub cam_matrix: [Padded<[f32; 3], 4>; 3],
