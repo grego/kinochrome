@@ -80,9 +80,6 @@ pub struct Renderer {
     egui_winit: egui_winit::State,
     surface: Arc<Surface>,
 
-    shapes: Vec<egui::epaint::ClippedShape>,
-    textures_delta: egui::TexturesDelta,
-
     gfx_queue: Arc<Queue>,
     render_pass: Arc<RenderPass>,
 
@@ -196,8 +193,6 @@ impl Renderer {
             egui_ctx,
             egui_winit,
             surface,
-            shapes: vec![],
-            textures_delta: Default::default(),
             gfx_queue,
             render_pass,
             vertex_index_buffer_pool,
@@ -234,27 +229,18 @@ impl Renderer {
         self.egui_ctx.begin_pass(raw_input);
     }
 
-    fn extract_draw_data_at_frame_end(&mut self) -> (Vec<ClippedPrimitive>, TexturesDelta) {
-        self.end_frame();
-        let shapes = std::mem::take(&mut self.shapes);
-        let textures_delta = std::mem::take(&mut self.textures_delta);
-        let clipped_meshes = self.egui_ctx.tessellate(shapes, self.pixels_per_point());
-        (clipped_meshes, textures_delta)
-    }
-
-    fn end_frame(&mut self) {
+    fn end_frame(&mut self) -> (Vec<ClippedPrimitive>, TexturesDelta) {
         let egui::FullOutput {
             platform_output,
             textures_delta,
             shapes,
-            pixels_per_point: _,
-            viewport_output: _,
+            ..
         } = self.egui_ctx.end_pass();
 
         self.egui_winit
             .handle_platform_output(surface_window(&self.surface), platform_output);
-        self.shapes = shapes;
-        self.textures_delta = textures_delta;
+        let clipped_meshes = self.egui_ctx.tessellate(shapes, self.pixels_per_point());
+        (clipped_meshes, textures_delta)
     }
 
     /// Access egui's context (which can be used to e.g. set fonts, visuals etc)
@@ -593,7 +579,7 @@ impl Renderer {
         &mut self,
         framebuffer: Arc<Framebuffer>,
     ) -> Arc<PrimaryAutoCommandBuffer> {
-        let (clipped_meshes, textures_delta) = self.extract_draw_data_at_frame_end();
+        let (clipped_meshes, textures_delta) = self.end_frame();
         let scale_factor = self.pixels_per_point();
         self.update_textures(&textures_delta.set);
 
