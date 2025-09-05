@@ -14,6 +14,7 @@ use vulkano::image::sampler::{Filter, SamplerCreateInfo};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io;
+use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, sync_channel};
 use std::sync::{Arc, Mutex};
@@ -80,6 +81,8 @@ pub struct State {
     pub frame_number: usize,
     /// Was the frame rewound?
     pub rewound_frame: bool,
+    /// The first and the last frame the video should be trimmed to.
+    pub trim: Range<usize>,
 
     /// Start of this video
     pub first_start: Instant,
@@ -314,6 +317,7 @@ impl State {
             current_file.undo_pc = self.undo_pc.clone();
             current_file.undo_color_params = self.undo_color_params.clone();
             current_file.current_frame = self.frame_number;
+            current_file.trim = self.trim.clone();
         }
     }
 
@@ -331,6 +335,7 @@ impl State {
         self.frame_number = video.current_frame;
         self.recompute = true;
         self.frames_len = video.frames.len();
+        self.trim = video.trim.clone();
         self.extent = [video.width as u32, video.height as u32];
         // Play timelapses sped up
         let fps = if video.fps >= 16.0 { video.fps } else { 24.0 };
@@ -475,5 +480,22 @@ impl State {
             || self.undo_pc.has_undo(&self.pc)
             || self.encoding_state.lock().unwrap().running
             || self.files_being_imported > 0
+    }
+
+    /// Set the frame as the first frame of the trimmed video
+    pub fn mark_in(&mut self, frame: usize) {
+        self.trim.start = frame;
+        if frame > self.trim.end {
+            self.trim.end = self.frames_len;
+        }
+    }
+
+    /// Set the frame as the last frame of the trimmed video
+    pub fn mark_out(&mut self, frame: usize) {
+        let frame = frame + 1;
+        self.trim.end = frame;
+        if frame < self.trim.start {
+            self.trim.start = 0;
+        }
     }
 }

@@ -287,6 +287,7 @@ fn main() -> Result<(), impl Error> {
         vid_frame_start: Instant::now(),
         frame_delta: 0.0,
         ideal_frame_len,
+        trim: 0..0,
 
         open_dialog,
         import_dialog,

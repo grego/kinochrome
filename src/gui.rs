@@ -201,22 +201,55 @@ pub fn layout(s: &mut State, ctx: &Context) {
     TopBottomPanel::bottom("Bottom panel")
         .show_separator_line(false)
         .show(ctx, |ui| {
+            if s.frames_len == 0 {
+                ui.disable();
+            }
             ui.horizontal(|ui| {
-                if s.frames_len == 0 {
-                    ui.disable();
+                ui.spacing_mut().item_spacing = Vec2::ZERO;
+                //ui.spacing_mut().window_margin = MarginF32::same(-sw / 2.0).into();
+                let av = ui.available_size();
+
+                let f = s.frames_len as f32;
+                ui.allocate_exact_size(
+                    Vec2 {
+                        x: s.trim.start as f32 * av.x / f,
+                        y: av.y,
+                    },
+                    Sense::empty(),
+                );
+                let (rect, _) = ui.allocate_exact_size(
+                    Vec2 {
+                        x: (s.trim.end + 1 - s.trim.start) as f32 * av.x / f,
+                        y: av.y / 2.0,
+                    },
+                    Sense::empty(),
+                );
+                if s.trim.start != 0 || s.trim.end != s.frames_len {
+                    ui.painter()
+                        .rect_filled(rect, 0.0, Rgba::from_luminance_alpha(0.5, 1.0));
                 }
+            });
+            ui.horizontal(|ui| {
+                ui.spacing_mut().slider_width = ui.available_width();
+                ui.add(
+                    Slider::new(&mut s.frame_number, 0..=(s.frames_len.saturating_sub(1)))
+                        .handle_shape(style::HandleShape::Rect { aspect_ratio: 0.35 })
+                        .integer(),
+                );
+            });
+            ui.horizontal(|ui| {
                 let icon = if s.paused { "⏵" } else { "⏸" };
                 if ui.button(icon).clicked() {
                     s.paused = !s.paused;
                     s.first_start = Instant::now();
                     s.vid_frame_start = Instant::now();
                 }
-                ui.spacing_mut().slider_width = ui.available_width();
-                ui.add(
-                    Slider::new(&mut s.frame_number, 0..=(s.frames_len.saturating_sub(1)))
-                        .handle_shape(style::HandleShape::Rect { aspect_ratio: 0.5 })
-                        .integer(),
-                );
+
+                let [cm, cs, cf] = timestamp(s.frame_number, s.ideal_frame_len);
+                let [wm, ws, wf] = timestamp(s.frames_len, s.ideal_frame_len);
+                ui.label(format!(
+                    "{cm:02} : {cs:02} : {cf:02} / {wm:02} : {ws:02} : {wf:02}"
+                ))
             });
         });
 
@@ -409,6 +442,20 @@ pub fn layout(s: &mut State, ctx: &Context) {
         s.zoom = 1.0;
         s.center = [0.5, 0.5].into();
     }
+
+    if ctx.input_mut(|i| i.key_pressed(Key::ArrowLeft) || i.key_pressed(Key::Comma)) {
+        s.frame_number = s.frame_number.saturating_sub(1);
+    }
+    if ctx.input_mut(|i| i.key_pressed(Key::ArrowRight) || i.key_pressed(Key::Period)) {
+        s.frame_number = (s.frame_number + 1).min(s.frames_len.saturating_sub(1));
+    }
+
+    if ctx.input_mut(|i| i.key_pressed(Key::I)) {
+        s.mark_in(s.frame_number);
+    }
+    if ctx.input_mut(|i| i.key_pressed(Key::O)) {
+        s.mark_out(s.frame_number);
+    }
 }
 
 /// A form for displaying and modifying the ffmpeg encoding parameters
@@ -478,4 +525,14 @@ fn get_relative_pos(Pos2 { x, y }: Pos2, r: Rect) -> Pos2 {
     let x = ((x - r.min.x) / r.width()).clamp(0.0, 1.0);
     let y = ((y - r.min.y) / r.height()).clamp(0.0, 1.0);
     Pos2 { x, y }
+}
+
+/// Calculate the timestamp from the number of frames and the frame length in microseconds.
+fn timestamp(frames: usize, frame_len: f32) -> [u16; 3] {
+    let time = frames as f32 * frame_len;
+    let whole_seconds = (time / 1_000_000.0) as u16;
+    let m = whole_seconds / 60;
+    let s = whole_seconds % 60;
+    let f = ((time - whole_seconds as f32 * 1_000_000.0) / frame_len) as u16;
+    [m, s, f]
 }

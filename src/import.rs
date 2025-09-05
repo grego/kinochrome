@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, BufReader, ErrorKind, Read, Seek, SeekFrom};
 use std::mem::swap;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{
     Arc, Mutex,
@@ -70,6 +71,8 @@ pub struct VideoFile {
     pub current_frame: usize,
     /// Is the video selected?
     pub selected: bool,
+    /// The first and the last frame the video should be trimmed to.
+    pub trim: Range<usize>,
 }
 
 /// A map of focus pixels, indexed by camera model, width and height
@@ -188,7 +191,7 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
     let mut raw_info = None;
     let (mut width, mut height) = (0, 0);
     let (mut raw_w, mut raw_h) = (0, 0);
-    let mut row_binning = 1;
+    let mut column_binning = 1;
     let mut camera = 0;
     let mut bits_per_pixel = 14;
     let fps: f32 = header.fps.into();
@@ -230,7 +233,7 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
                 camera = id.camera_model;
             }
             Header::RawCapture(rc) => {
-                row_binning = rc.binning_x / (1 + rc.skipping_y);
+                column_binning = rc.binning_x / (1 + rc.skipping_y);
                 dbg!(rc);
             }
             Header::Exposure(exp) => {
@@ -303,6 +306,7 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
 
     let focus_pixels = load_focus_pixels(fpm, camera, raw_w, raw_h);
 
+    let len = frames.len();
     Ok(VideoFile {
         path: path.into(),
         camera,
@@ -317,13 +321,14 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
         width,
         height,
         fps,
-        column_binning: row_binning,
+        column_binning,
         spec,
         undo_color_params,
         undo_pc,
         pc,
         color_params,
         current_frame: 0,
+        trim: 0..len,
         selected: false,
     })
 }
@@ -441,6 +446,7 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
     undo_color_params.add_undo(&color_params);
     let mut undo_pc: Undoer<_> = Default::default();
     undo_pc.add_undo(&pc);
+    let len = entries.len();
     Ok(VideoFile {
         path: path.into(),
         camera: 0,
@@ -463,6 +469,7 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
         color_params,
         current_frame: 0,
         selected: false,
+        trim: 0..len,
     })
 }
 
@@ -559,15 +566,9 @@ pub fn read_frames(
         drop(output);
 
         // The receiver may be dropped if the file was changed meanwhile.
-        let _ = send.send((upload_buffer, i));
-
-        /*match result {
-            Ok(_) => {
-            }
-            Err(e) => {
-                eprintln!("Lossles JPEG decoder error: {e}");
-            }
-        }*/
+        let Ok(()) = send.send((upload_buffer, i)) else {
+            return;
+        };
 
         i += 1;
         if i >= video.frames.len() {

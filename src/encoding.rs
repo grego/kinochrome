@@ -176,10 +176,10 @@ fn encode_file(
     let pc = video.pc;
     let spec = video.spec;
     let column_binning = video.column_binning;
-    let frame_count = video.frames.len();
+    let frames = video.trim.clone();
 
     let wav_name = format!("{}.wav", name);
-    let has_audio = create_waw(&wav_name, &video)?;
+    let has_audio = create_wav(&wav_name, &video)?;
 
     let (cmd_send, cmd_recv) = channel();
     thread::spawn(move || read_frames(cloned_alloc, cmd_recv, false));
@@ -187,6 +187,7 @@ fn encode_file(
     cmd_send
         .send(VideoCommand::ChangeFile(video.into(), send))
         .unwrap();
+    cmd_send.send(VideoCommand::Rewind(frames.start)).unwrap();
 
     if resize.is_none() && column_binning > 1 {
         resize = Some([width as u32 * column_binning as u32, height as u32]);
@@ -229,7 +230,7 @@ fn encode_file(
 
     {
         let mut s = state.lock().unwrap();
-        s.num_frames = frame_count;
+        s.num_frames = frames.end - frames.start;
         s.cur_frame = 0;
     }
     let (upload_buffer, _) = recv.recv().unwrap();
@@ -240,7 +241,7 @@ fn encode_file(
         Some((output_buffers[second_img as usize].clone(), resize)),
     );
     second_img = !second_img;
-    for _ in 1..frame_count {
+    for _ in frames {
         state.lock().unwrap().cur_frame += 1;
         let Ok((upload_buffer, _)) = recv.recv() else {
             break;
@@ -269,46 +270,61 @@ fn encode_file(
     Ok(())
 }
 
-fn create_waw(name: &str, mlv: &VideoFile) -> Result<bool> {
+fn create_wav(name: &str, mlv: &VideoFile) -> Result<bool> {
+    let trim = mlv.trim.clone();
     let Some(wi) = mlv.wav_info else {
         return Ok(false);
     };
-    let sync_offset = mlv.audio_delay * wi.bytes_per_second as i64 / 1_000_000;
-    let sync_offset = (sync_offset / wi.block_align as i64) * wi.block_align as i64;
+    let frame_len = (1_000_000.0 / mlv.fps) as i64;
+    let sync_offset =
+        (mlv.audio_delay + trim.start as i64 * frame_len) * wi.bytes_per_second as i64 / 1_000_000;
+    let mut sync_offset = (sync_offset / wi.block_align as i64) * wi.block_align as i64;
+
+    let size = mlv.audio_frames.iter().map(|f| f.len).sum::<usize>() as i64;
+    let mut desired_size =
+        ((trim.end - trim.start) as i64 * frame_len) * wi.bytes_per_second as i64 / 1_000_000;
+    // Align to block.
+    desired_size += (-desired_size).rem_euclid(wi.block_align as i64);
+    let mut size = (size as i64 - sync_offset).min(desired_size) as usize;
 
     let mut vidfile = File::open(&mlv.path)?;
-    let size: u32 = mlv.audio_frames.iter().map(|f| f.len).sum::<usize>() as u32;
-    let size = (size as i64 - sync_offset) as u32;
-
     let mut out = BufWriter::new(File::create(name)?);
     out.write_all(b"RIFF")?;
-    out.write_all(&(size + 36).to_le_bytes())?;
+    out.write_all(&((size + 36) as u32).to_le_bytes())?;
     out.write_all(b"WAVE")?;
     out.write_all(b"fmt ")?;
     out.write_all(&16_u32.to_le_bytes())?;
     wi.write_packed(&mut out)?;
+
     out.write_all(b"data")?;
     out.write_all(&size.to_le_bytes())?;
 
     let mut audio_iter = mlv.audio_frames.iter();
-    let Some(&AudioFrame { pos, len }) = audio_iter.next() else {
+    let Some(&AudioFrame { pos, mut len }) = audio_iter.next() else {
         fs::remove_file(name)?;
         return Ok(false);
     };
     let mut start = 0;
     if sync_offset <= 0 {
         out.write_all(&vec![0; (-sync_offset) as usize])?;
+        sync_offset = 0;
     } else {
         start = sync_offset as usize;
+        sync_offset = (sync_offset as u64).saturating_sub(len as u64) as i64;
+        len = len.saturating_sub(start).min(size);
+        size = size.saturating_sub(len);
     }
     vidfile.seek(SeekFrom::Start(pos + start as u64))?;
-    dbg!((len, start, wi.block_align));
-    let mut payload = vec![0; len.saturating_sub(start)];
+    let mut payload = vec![0; len];
     vidfile.read_exact(&mut payload)?;
     out.write_all(&payload)?;
 
-    for &AudioFrame { pos, len } in audio_iter {
-        vidfile.seek(SeekFrom::Start(pos))?;
+    for &AudioFrame { pos, mut len } in audio_iter {
+        start = sync_offset as usize;
+        sync_offset = (sync_offset as u64).saturating_sub(len as u64) as i64;
+        len = len.saturating_sub(start).min(size);
+        size = size.saturating_sub(len);
+        vidfile.seek(SeekFrom::Start(pos + start as u64))?;
         let mut payload = vec![0; len];
         vidfile.read_exact(&mut payload)?;
         out.write_all(&payload)?;
