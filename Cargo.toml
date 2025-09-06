@@ -9,7 +9,7 @@ repository = "https://git.sr.ht/~grego/kinochrome"
 [dependencies]
 # Crates connected to the Kinochrome project
 ljpeg = "0.1.2"
-mlv = { version = "0.0.2", features = ["serde"] }
+mlv = { version = "0.1.0", features = ["serde"] }
 dng = "1.5.3"
 packbytes = "0.2"
 
@@ -19,7 +19,7 @@ winit = { version = "0.30", default-features = false, features = ["x11", "waylan
 egui = { version = "0.32", features = ["serde"] }
 egui-winit = { version = "0.32", default-features = false, features = ["x11", "wayland"] }
 serde = { version = "1", features = ["derive", "rc"] }
-toml = "0.8"
+toml = "0.9"
 ciborium = "0.2"
 foldhash = "0.1"
 shlex = "1.3"
@@ -27,9 +27,7 @@ egui-file-dialog = { version = "0.11", default-features = false }
 
 [profile.dev]
 opt-level = 1 # ljpeg decoding is unusably slow otherwise
-debug = "limited"
 lto = false
-strip = "debuginfo"
 panic = "abort"
 
 [profile.release]

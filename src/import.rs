@@ -114,6 +114,8 @@ pub enum VideoCommand {
     ChangeFile(Box<VideoFile>, SyncSender<(Subbuffer<[u16]>, usize)>),
     /// Rewind to the provided frame
     Rewind(usize),
+    /// Only decode the frames in the specified interval
+    Trim(Range<usize>),
 }
 
 /// Compression scheme
@@ -399,10 +401,8 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
                 }
             } else if tag == ifd::BlackLevel.tag {
                 black_level = entry.value.as_u32().ok_or_else(err)? as f32 / ((1 << 16) - 1) as f32;
-                dbg!(black_level);
             } else if tag == ifd::WhiteLevel.tag {
                 white_level = entry.value.as_u32().ok_or_else(err)? as f32 / ((1 << 16) - 1) as f32;
-                dbg!(white_level);
             } else if tag == ifd::ColorMatrix1.tag {
                 let cm: Vec<_> = entry
                     .value
@@ -528,12 +528,12 @@ pub fn read_frames(
         Frames::Mlv(ref frames, _) => Frames::Mlv(frames.clone(), File::open(&video.path).unwrap()),
         Frames::Dng(ref frames) => Frames::Dng(frames.clone()),
     };
+    let mut trim = video.trim;
     let mut i = 0;
     loop {
         while let Ok(cmd) = cmd_recv.try_recv() {
             match cmd {
                 VideoCommand::Rewind(j) => {
-                    println!("rewind {}", j);
                     i = j % video.frames.len();
                 }
                 VideoCommand::ChangeFile(m, s) => {
@@ -545,6 +545,9 @@ pub fn read_frames(
                         }
                         Frames::Dng(ref frames) => Frames::Dng(frames.clone()),
                     };
+                }
+                VideoCommand::Trim(t) => {
+                    trim = t;
                 }
             }
         }
@@ -566,14 +569,12 @@ pub fn read_frames(
         drop(output);
 
         // The receiver may be dropped if the file was changed meanwhile.
-        let Ok(()) = send.send((upload_buffer, i)) else {
-            return;
-        };
+        let _ = send.send((upload_buffer, i));
 
         i += 1;
-        if i >= video.frames.len() {
+        if i >= trim.end {
             if looped {
-                i = 0;
+                i = trim.start;
             } else {
                 return;
             }
@@ -709,9 +710,6 @@ pub fn interpolate_pixel(image_data: &mut [u16], x: usize, y: usize, w: usize, h
     //let (mut min, mut max) = (u32::MAX, 0);
     let (x, y, w, _h) = (x as isize, y as isize, w as isize, h as isize);
     let fc0 = find_color(x, y);
-    if fc0 == 1 {
-        dbg!(fc0);
-    };
 
     let mut pick_middle = |mut a, mut b, mut c, mut d| {
         if b < a {

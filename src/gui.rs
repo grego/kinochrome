@@ -17,18 +17,18 @@ pub fn layout(s: &mut State, ctx: &Context) {
     TopBottomPanel::top("top panel").show(ctx, |ui| {
         MenuBar::new().ui(ui, |ui| {
             ui.menu_button("File", |ui| {
-                if ui.button("Open").clicked() {
+                if ui.button("Open").on_hover_text("Ctrl + O").clicked() {
                     s.open_dialog.pick_file();
                 }
-                if ui.button("Save").clicked() {
+                if ui.button("Save").on_hover_text("Ctrl + S").clicked() {
                     s.open_dialog.save_file();
                 }
                 ui.separator();
 
-                if ui.button("Import").clicked() {
+                if ui.button("Import").on_hover_text("Ctrl + I").clicked() {
                     s.import_dialog.pick_multiple();
                 }
-                if ui.button("Export").clicked() {
+                if ui.button("Export").on_hover_text("Ctrl + E").clicked() {
                     s.encoding_dialog.shown = true;
                     s.encoding_dialog.resize = s.extent;
                     s.encoding_dialog.fps = 1_000_000.0 / s.ideal_frame_len;
@@ -39,10 +39,18 @@ pub fn layout(s: &mut State, ctx: &Context) {
                 }
             });
             ui.menu_button("Edit", |ui| {
-                if ui.add_enabled(s.has_undo(), Button::new("Undo")).clicked() {
+                if ui
+                    .add_enabled(s.has_undo(), Button::new("Undo"))
+                    .on_hover_text("Ctrl + Z")
+                    .clicked()
+                {
                     s.undo();
                 }
-                if ui.add_enabled(s.has_redo(), Button::new("Redo")).clicked() {
+                if ui
+                    .add_enabled(s.has_redo(), Button::new("Redo"))
+                    .on_hover_text("Ctrl + Y")
+                    .clicked()
+                {
                     s.redo();
                 }
             });
@@ -210,23 +218,27 @@ pub fn layout(s: &mut State, ctx: &Context) {
                 let av = ui.available_size();
 
                 let f = s.frames_len as f32;
-                ui.allocate_exact_size(
-                    Vec2 {
-                        x: s.trim.start as f32 * av.x / f,
-                        y: av.y,
-                    },
-                    Sense::empty(),
-                );
-                let (rect, _) = ui.allocate_exact_size(
-                    Vec2 {
-                        x: (s.trim.end + 1 - s.trim.start) as f32 * av.x / f,
-                        y: av.y / 2.0,
-                    },
-                    Sense::empty(),
-                );
-                if s.trim.start != 0 || s.trim.end != s.frames_len {
-                    ui.painter()
-                        .rect_filled(rect, 0.0, Rgba::from_luminance_alpha(0.5, 1.0));
+                if s.trim.start > 0 {
+                    ui.allocate_exact_size(
+                        Vec2 {
+                            x: s.trim.start as f32 * av.x / f,
+                            y: av.y,
+                        },
+                        Sense::empty(),
+                    );
+                }
+                if s.trim.end - s.trim.start > 0 {
+                    let (rect, _) = ui.allocate_exact_size(
+                        Vec2 {
+                            x: (s.trim.end - s.trim.start) as f32 * av.x / f,
+                            y: av.y / 2.0,
+                        },
+                        Sense::empty(),
+                    );
+                    if s.trim.start != 0 || s.trim.end != s.frames_len {
+                        ui.painter()
+                            .rect_filled(rect, 0.0, Rgba::from_luminance_alpha(0.5, 1.0));
+                    }
                 }
             });
             ui.horizontal(|ui| {
@@ -239,10 +251,25 @@ pub fn layout(s: &mut State, ctx: &Context) {
             });
             ui.horizontal(|ui| {
                 let icon = if s.paused { "⏵" } else { "⏸" };
-                if ui.button(icon).clicked() {
+                if ui
+                    .button(icon)
+                    .on_hover_text(if s.paused {
+                        "Play (Space)"
+                    } else {
+                        "Pause (Space)"
+                    })
+                    .clicked()
+                {
                     s.paused = !s.paused;
                     s.first_start = Instant::now();
                     s.vid_frame_start = Instant::now();
+                }
+
+                if ui.button("{").on_hover_text("Trim in (I)").clicked() {
+                    s.mark_in(s.frame_number);
+                }
+                if ui.button("}").on_hover_text("Trim out (O)").clicked() {
+                    s.mark_out(s.frame_number);
                 }
 
                 let [cm, cs, cf] = timestamp(s.frame_number, s.ideal_frame_len);

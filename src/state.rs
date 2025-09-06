@@ -213,7 +213,10 @@ impl State {
                         vid_frame_len,
                         frame_len,
                     );*/
-                    self.frame_number = (self.frame_number + 1) % self.frames_len;
+                    self.frame_number = self.frame_number + 1;
+                    if self.frame_number >= self.trim.end {
+                        self.frame_number = self.trim.start;
+                    }
 
                     let (upload_buffer, _) = self.recv.recv().unwrap();
                     self.compute.process(
@@ -488,6 +491,7 @@ impl State {
         if frame > self.trim.end {
             self.trim.end = self.frames_len;
         }
+        let _ = self.cmd_send.send(VideoCommand::Trim(self.trim.clone()));
     }
 
     /// Set the frame as the last frame of the trimmed video
@@ -497,5 +501,6 @@ impl State {
         if frame < self.trim.start {
             self.trim.start = 0;
         }
+        let _ = self.cmd_send.send(VideoCommand::Trim(self.trim.clone()));
     }
 }

@@ -403,7 +403,7 @@ impl ApplicationHandler for App {
             viewport,
             previous_frame_end,
             renderer,
-            redraw_frames: 2,
+            redraw_frames: 8,
         })
     }
 
@@ -505,7 +505,7 @@ impl ApplicationHandler for App {
             event => {
                 // Update Egui integration so the UI works!
                 if rcx.renderer.update(&event) {
-                    rcx.redraw_frames = 8;
+                    rcx.redraw_frames = 64;
                 }
             }
         }
@@ -514,7 +514,7 @@ impl ApplicationHandler for App {
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         let rcx = self.rcx.as_mut().unwrap();
         if self.state.redraw() {
-            rcx.redraw_frames = 8;
+            rcx.redraw_frames = 64;
         }
         if rcx.redraw_frames > 0 {
             rcx.redraw_frames -= 1;
