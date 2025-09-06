@@ -66,8 +66,15 @@ pub fn layout(s: &mut State, ctx: &Context) {
         ScrollArea::vertical().show(ui, |ui| {
             let mut last_selected = 0;
             let mut select_range = None;
+            let mut to_remove = Vec::with_capacity(0);
             for (i, (filename, video)) in s.files.iter_mut().enumerate() {
                 let flabel = ui.add(Button::selectable(video.selected, filename));
+
+                flabel.context_menu(|ui| {
+                    if ui.button("Remove from the list").clicked() {
+                        to_remove.push(filename.clone());
+                    }
+                });
 
                 if flabel.clicked() {
                     if ui.input(|i| i.modifiers.shift) {
@@ -84,6 +91,10 @@ pub fn layout(s: &mut State, ctx: &Context) {
                 if video.selected {
                     last_selected = i;
                 }
+            }
+            // Cannot borrow s as mutable inside the loop
+            for file in to_remove {
+                s.remove_file(&file);
             }
             if let Some((i, j)) = select_range {
                 for (_, video) in s.files.iter_mut().skip(i + 1).take(j - i) {

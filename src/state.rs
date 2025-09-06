@@ -377,6 +377,23 @@ impl State {
         self.extent[0] *= video.column_binning as u32;
     }
 
+    /// Remove the file from the file list
+    pub fn remove_file(&mut self, file: &str) {
+        if self.filename == file {
+            self.filename = Default::default();
+            self.paused = true;
+            self.recompute = false;
+            self.rewound_frame = false;
+            self.trim = 0..0;
+            self.frame_number = 0;
+            self.frames_len = 0;
+            let _ = self.cmd_send.send(VideoCommand::Trim(0..0));
+            self.image_ids = None;
+            self.current_img = None;
+        }
+        self.files.remove(file);
+    }
+
     /// Spawn the thread sending the processed frames to ffmpeg
     fn start_encoding(&mut self, path: PathBuf) {
         self.update_current_file();
