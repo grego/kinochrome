@@ -395,7 +395,7 @@ fn encode_cdng(mut name: String, video: VideoFile, state: &Mutex<EncodingState>)
             let ifd = ifd.clone();
             s.spawn(|| encode_single_dng(r, &name, ifd, &video));
         }
-        for i in 0..vidframes.len() {
+        for i in video.trim.clone() {
             let (payload, pan) = vidframes.read_ith(i);
 
             if let Err(e) = send[i % num_threads].send((payload, i, pan)) {
@@ -406,6 +406,9 @@ fn encode_cdng(mut name: String, video: VideoFile, state: &Mutex<EncodingState>)
         }
         drop(send);
     });
+
+    let wav_name = format!("{}/{}.wav", &name, &name);
+    create_wav(&wav_name, &video)?;
     Ok(())
 }
 
