@@ -502,6 +502,10 @@ impl ApplicationHandler for App {
                     }
                 }
             }
+            WindowEvent::DroppedFile(path) => {
+                println!("Dropped {:?}", &path);
+                self.state.import_file(path);
+            }
             event => {
                 // Update Egui integration so the UI works!
                 if rcx.renderer.update(&event) {

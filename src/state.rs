@@ -125,10 +125,7 @@ impl State {
     pub fn update(&mut self, renderer: &mut Renderer) {
         if let Some(items) = self.import_dialog.take_picked_multiple() {
             for item in items {
-                self.path_send
-                    .send((item, false))
-                    .expect("Video parsing thread quit");
-                self.files_being_imported += 1;
+                self.import_file(item);
             }
         } else if let Some(item) = self.import_dialog.take_picked() {
             self.encoding_dialog.shown = false;
@@ -310,6 +307,14 @@ impl State {
             self.recompute = true;
             self.rewound_frame = true;
         }
+    }
+
+    /// Import the file with the given path.
+    pub fn import_file(&mut self, path: PathBuf) {
+        self.path_send
+            .send((path, false))
+            .expect("Video parsing thread quit");
+        self.files_being_imported += 1;
     }
 
     /// Update the parameters of the current file
