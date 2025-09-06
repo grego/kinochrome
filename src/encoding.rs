@@ -33,6 +33,8 @@ pub struct EncodingState {
     pub cur_frame: usize,
     /// Is the encoding running?
     pub running: bool,
+    /// Is the encoding to be aborted?
+    pub abort: bool,
 }
 
 /// Recipe for ffmpeg encoding
@@ -146,7 +148,14 @@ pub fn encode(
         s.cur_file = 0;
     }
     for (name, video) in files {
-        state.lock().unwrap().cur_file += 1;
+        {
+            let mut s = state.lock().unwrap();
+            s.cur_file += 1;
+            if s.abort {
+                s.abort = false;
+                break;
+            }
+        }
         if let Err(e) = encode_file(
             name,
             video,
@@ -232,6 +241,9 @@ fn encode_file(
         let mut s = state.lock().unwrap();
         s.num_frames = frames.end - frames.start;
         s.cur_frame = 0;
+        if s.abort {
+            return Ok(());
+        }
     }
     let (upload_buffer, _) = recv.recv().unwrap();
     compute.process(
@@ -242,7 +254,13 @@ fn encode_file(
     );
     second_img = !second_img;
     for _ in frames {
-        state.lock().unwrap().cur_frame += 1;
+        {
+            let mut s = state.lock().unwrap();
+            s.cur_frame += 1;
+            if s.abort {
+                return Ok(());
+            }
+        }
         let Ok((upload_buffer, _)) = recv.recv() else {
             break;
         };
@@ -342,7 +360,14 @@ pub fn encode_cdngs(files: Vec<(String, VideoFile)>, state: Arc<Mutex<EncodingSt
         s.cur_file = 0;
     }
     for (name, mlv) in files {
-        state.lock().unwrap().cur_file += 1;
+        {
+            let mut s = state.lock().unwrap();
+            s.cur_file += 1;
+            if s.abort {
+                s.abort = false;
+                break;
+            }
+        }
         if let Err(e) = encode_cdng(name, mlv, &state) {
             eprintln!("{e}");
         }
@@ -389,6 +414,9 @@ fn encode_cdng(mut name: String, video: VideoFile, state: &Mutex<EncodingState>)
         let mut s = state.lock().unwrap();
         s.num_frames = video.frames.len();
         s.cur_frame = 0;
+        if s.abort {
+            return Ok(());
+        }
     }
     thread::scope(|s| {
         for r in recv {
@@ -402,7 +430,13 @@ fn encode_cdng(mut name: String, video: VideoFile, state: &Mutex<EncodingState>)
                 eprintln!("{:?}", e);
             }
 
-            state.lock().unwrap().cur_frame += 1;
+            {
+                let mut s = state.lock().unwrap();
+                s.cur_frame += 1;
+                if s.abort {
+                    return;
+                }
+            }
         }
         drop(send);
     });

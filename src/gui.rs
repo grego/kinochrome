@@ -360,8 +360,9 @@ pub fn layout(s: &mut State, ctx: &Context) {
         }
     });
 
-    let es = s.encoding_state.lock().unwrap().clone();
-    if es.running {
+    let mut es = s.encoding_state.lock().unwrap();
+    let running = es.running;
+    if running {
         let id = Id::new("Export");
         let title = format!("Exporting file {}/{}", es.cur_file, es.num_files);
         Window::new(&title)
@@ -371,8 +372,16 @@ pub fn layout(s: &mut State, ctx: &Context) {
                 ui.add(
                     ProgressBar::new(es.cur_frame as f32 / es.num_frames as f32).show_percentage(),
                 );
+                ui.vertical_centered(|ui| {
+                    if ui.button("Abort").clicked() {
+                        es.abort = true;
+                    }
+                });
             });
-    } else if s.encoding_dialog.shown {
+    }
+    drop(es);
+
+    if !running && s.encoding_dialog.shown {
         Window::new("Export videos")
             .open(&mut s.encoding_dialog.shown)
             .show(ctx, |ui| {
