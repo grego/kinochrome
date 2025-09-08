@@ -3,7 +3,8 @@ use crate::import::{AudioFrame, Frames, VideoCommand, VideoFile, decode_image, r
 
 use std::array;
 use std::fs::{self, File, read_to_string};
-use std::io::{BufWriter, Read, Result, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Error, ErrorKind, Read, Result, Seek, SeekFrom, Write};
+use std::panic;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, channel, sync_channel};
@@ -276,9 +277,7 @@ fn encode_file(
     }
     compute.wait();
     second_img = !second_img;
-    stdin
-        .write_all(&output_buffers[second_img as usize].read().unwrap())
-        .unwrap();
+    stdin.write_all(&output_buffers[second_img as usize].read().unwrap())?;
     drop(stdin);
     child.wait().unwrap();
 
@@ -303,7 +302,7 @@ fn create_wav(name: &str, mlv: &VideoFile) -> Result<bool> {
         ((trim.end - trim.start) as i64 * frame_len) * wi.bytes_per_second as i64 / 1_000_000;
     // Align to block.
     desired_size += (-desired_size).rem_euclid(wi.block_align as i64);
-    let mut size = (size as i64 - sync_offset).min(desired_size) as usize;
+    let mut size = (size - sync_offset).min(desired_size) as usize;
 
     let mut vidfile = File::open(&mlv.path)?;
     let mut out = BufWriter::new(File::create(name)?);
@@ -381,7 +380,9 @@ fn encode_cdng(mut name: String, video: VideoFile, state: &Mutex<EncodingState>)
         name.truncate(name.len() - suffix.len());
     }
 
-    let mut ifd = rawinfo_to_ifd(&video.raw_info.unwrap());
+    let Some(mut ifd) = video.raw_info.as_ref().map(rawinfo_to_ifd) else {
+        return Err(Error::other("RAW info not found"));
+    };
     ifd.insert(ifd::ReelName, name.as_str());
     ifd.insert(
         ifd::FrameRate,
@@ -394,9 +395,7 @@ fn encode_cdng(mut name: String, video: VideoFile, state: &Mutex<EncodingState>)
     };
     fs::create_dir_all(&name)?;
 
-    let mut num_threads: usize = thread::available_parallelism()
-        .unwrap_or(1.try_into().unwrap())
-        .into();
+    let mut num_threads: usize = thread::available_parallelism().map(Into::into).unwrap_or(1);
     if num_threads > 2 {
         num_threads -= 2;
     }
@@ -418,28 +417,32 @@ fn encode_cdng(mut name: String, video: VideoFile, state: &Mutex<EncodingState>)
             return Ok(());
         }
     }
-    thread::scope(|s| {
+    thread::scope(|s| -> Result<()> {
+        let mut threads = Vec::with_capacity(num_threads);
         for r in recv {
             let ifd = ifd.clone();
-            s.spawn(|| encode_single_dng(r, &name, ifd, &video));
+            threads.push(s.spawn(|| encode_single_dng(r, &name, ifd, &video)));
         }
         for i in video.trim.clone() {
             let (payload, pan) = vidframes.read_ith(i);
-
-            if let Err(e) = send[i % num_threads].send((payload, i, pan)) {
-                eprintln!("{:?}", e);
-            }
-
+            send[i % num_threads].send((payload, i, pan)).unwrap();
             {
                 let mut s = state.lock().unwrap();
                 s.cur_frame += 1;
                 if s.abort {
-                    return;
+                    return Ok(());
                 }
             }
         }
         drop(send);
-    });
+        for thread in threads {
+            match thread.join() {
+                Ok(result) => result?,
+                Err(e) => panic::resume_unwind(e),
+            }
+        }
+        Ok(())
+    })?;
 
     let wav_name = format!("{}/{}.wav", &name, &name);
     create_wav(&wav_name, &video)?;
@@ -448,7 +451,12 @@ fn encode_cdng(mut name: String, video: VideoFile, state: &Mutex<EncodingState>)
 
 type EncData = (Vec<u8>, usize, [u16; 2]);
 
-fn encode_single_dng(recv: Receiver<EncData>, name: &str, ifd: Ifd, video: &VideoFile) {
+fn encode_single_dng(
+    recv: Receiver<EncData>,
+    name: &str,
+    ifd: Ifd,
+    video: &VideoFile,
+) -> Result<()> {
     let (width, height) = (video.width, video.height);
     let encoder = Encoder::new(
         width as u16 / 2,
@@ -462,16 +470,15 @@ fn encode_single_dng(recv: Receiver<EncData>, name: &str, ifd: Ifd, video: &Vide
 
     let mut output = vec![0; width * height];
     while let Ok((payload, i, pan)) = recv.recv() {
-        if let Err(e) = decode_image(
+        decode_image(
             &payload,
             &mut output,
             (video.compression, video.bits_per_pixel),
             [width, height],
             &video.focus_pixels,
             pan,
-        ) {
-            eprintln!("{:?}", e);
-        }
+        )
+        .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
         let encoded = encoder.encode(&output).unwrap();
         let len = encoded.len();
         let mut ifd = ifd.clone();
@@ -479,13 +486,11 @@ fn encode_single_dng(recv: Receiver<EncData>, name: &str, ifd: Ifd, video: &Vide
         ifd.insert(ifd::StripByteCounts, len as u32);
 
         let path = format!("{}/{}_{:06}.dng", name, name, i);
-        if let Err(e) = File::create(&path).and_then(|file| {
-            let writer = BufWriter::new(file);
-            DngWriter::write_dng(writer, true, FileType::Dng, vec![ifd])
-        }) {
-            eprintln!("{:?}", e);
-        }
+        let file = File::create(&path)?;
+        let writer = BufWriter::new(file);
+        DngWriter::write_dng(writer, true, FileType::Dng, vec![ifd])?;
     }
+    Ok(())
 }
 
 fn rawinfo_to_ifd(ri: &RawInfo) -> Ifd {

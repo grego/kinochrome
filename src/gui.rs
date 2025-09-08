@@ -323,11 +323,11 @@ pub fn layout(s: &mut State, ctx: &Context) {
         let hover_pos = response.hover_pos().map(|p| get_relative_pos(p, rect));
         let origin: Pos2 = [0.5, 0.5].into();
         if response.clicked() {
-            if let Some(pos) = response.interact_pointer_pos() {
-                if s.picker_mode {
-                    let Pos2 { x, y } = s.center + s.zoom * (get_relative_pos(pos, rect) - origin);
-                    s.picked_point = Some([x, y]);
-                }
+            if let Some(pos) = response.interact_pointer_pos()
+                && s.picker_mode
+            {
+                let Pos2 { x, y } = s.center + s.zoom * (get_relative_pos(pos, rect) - origin);
+                s.picked_point = Some([x, y]);
             }
         } else if response.dragged() {
             let mut delta = response.drag_delta();

@@ -210,7 +210,7 @@ impl State {
                         vid_frame_len,
                         frame_len,
                     );*/
-                    self.frame_number = self.frame_number + 1;
+                    self.frame_number += 1;
                     if self.frame_number >= self.trim.end {
                         self.frame_number = self.trim.start;
                     }
@@ -272,14 +272,12 @@ impl State {
 
         gui::layout(self, &ctx);
 
-        if self.picker_mode {
-            if let Some(xy) = self.picked_point.take() {
-                if let Some(rgb) = self.compute.sample(xy) {
-                    self.color_params.illuminant =
-                        Illuminant::custom(self.color_params.rgb_to_xy(rgb));
-                    self.picker_mode = false
-                }
-            }
+        if self.picker_mode
+            && let Some(xy) = self.picked_point.take()
+            && let Some(rgb) = self.compute.sample(xy)
+        {
+            self.color_params.illuminant = Illuminant::custom(self.color_params.rgb_to_xy(rgb));
+            self.picker_mode = false
         }
 
         self.prev_pc = self.pc;
