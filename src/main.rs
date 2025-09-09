@@ -255,7 +255,6 @@ fn main() -> Result<(), impl Error> {
         prev_color_params: Default::default(),
         undo_color_params: Default::default(),
         pc: Default::default(),
-        prev_pc: Default::default(),
         undo_pc: Default::default(),
         compute,
         image_ids: None,

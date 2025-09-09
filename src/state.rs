@@ -42,9 +42,6 @@ pub struct State {
     pub undo_color_params: Undoer<ColorParams>,
     /// Current push constant data
     pub pc: PushConstantData,
-    /// Push constant data from the previous frame.
-    /// Needed to determine whether a redraw is necessary
-    pub prev_pc: PushConstantData,
     /// Previous push constant data
     pub undo_pc: Undoer<PushConstantData>,
     /// GPU compute operation
@@ -229,7 +226,7 @@ impl State {
                     self.current_img = Some(image_ids[self.second_img as usize]);
                     self.compute.pause();
                 }
-            } else if !self.paused {
+            } else if !self.paused && !self.compute.is_computing() {
                 let (upload_buffer, _) = self.recv.recv().unwrap();
 
                 self.compute.process(
@@ -241,10 +238,7 @@ impl State {
             }
         }
 
-        if self.paused
-            && !self.compute.is_computing()
-            && (self.pc != self.prev_pc || self.recompute)
-        {
+        if self.paused && !self.compute.is_computing() && self.recompute {
             let upload_buffer = if self.rewound_frame {
                 loop {
                     let (upload_buffer, i) = self.recv.recv().unwrap();
@@ -270,6 +264,7 @@ impl State {
         self.open_dialog.update(&ctx);
         self.import_dialog.update(&ctx);
 
+        let prev_pc = self.pc;
         gui::layout(self, &ctx);
 
         if self.picker_mode
@@ -280,10 +275,12 @@ impl State {
             self.picker_mode = false
         }
 
-        self.prev_pc = self.pc;
         self.color_params
             .update_push_constants(&self.prev_color_params, &mut self.pc);
         self.prev_color_params = self.color_params;
+        if self.pc != prev_pc {
+            self.recompute = true;
+        }
 
         let time = self.first_start.elapsed().as_millis() as f64 / 1000.0;
         self.undo_color_params.feed_state(time, &self.color_params);
