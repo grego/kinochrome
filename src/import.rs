@@ -308,7 +308,6 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
 
     let focus_pixels = load_focus_pixels(fpm, camera, raw_w, raw_h);
 
-    let len = frames.len();
     Ok(VideoFile {
         path: path.into(),
         camera,
@@ -330,7 +329,7 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
         pc,
         color_params,
         current_frame: 0,
-        trim: 0..len,
+        trim: 0..frame_count,
         selected: false,
     })
 }
@@ -545,6 +544,7 @@ pub fn read_frames(
                         }
                         Frames::Dng(ref frames) => Frames::Dng(frames.clone()),
                     };
+                    trim = video.trim;
                 }
                 VideoCommand::Trim(t) => {
                     trim = t;
