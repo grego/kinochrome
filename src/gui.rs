@@ -346,17 +346,17 @@ pub fn layout(s: &mut State, ctx: &Context) {
                 _ => None,
             })
         });
-        if let Some(delta) = zoom_delta {
+        if let Some(delta) = zoom_delta
+            && let Some(hp) = hover_pos
+        {
             let old_zoom = s.zoom;
             s.zoom = (s.zoom * delta).clamp(0.05, 1.0);
-            if let Some(hp) = hover_pos {
-                let shift = Pos2::default() - s.center;
-                let old = (hp - origin.to_vec2()) * old_zoom + shift;
-                let new = (hp - origin.to_vec2()) * s.zoom + shift;
-                s.center += old - new;
-                let z = s.zoom / 2.0;
-                s.center = s.center.clamp([z, z].into(), [1.0 - z, 1.0 - z].into());
-            }
+            let shift = Pos2::default() - s.center;
+            let old = (hp - origin.to_vec2()) * old_zoom + shift;
+            let new = (hp - origin.to_vec2()) * s.zoom + shift;
+            s.center += old - new;
+            let z = s.zoom / 2.0;
+            s.center = s.center.clamp([z, z].into(), [1.0 - z, 1.0 - z].into());
         }
     });
 
