@@ -1,6 +1,6 @@
 use crate::color_utils::Illuminant;
 use crate::encoding::{ParamValue, Recipe};
-use crate::state::State;
+use crate::state::{ERROR_LOG, State};
 
 use egui::load::SizedTexture;
 use egui::{
@@ -447,6 +447,20 @@ pub fn layout(s: &mut State, ctx: &Context) {
                 ui.label(env!("CARGO_PKG_DESCRIPTION"));
                 ui.hyperlink_to("source code", env!("CARGO_PKG_REPOSITORY"));
             });
+    }
+
+    {
+        let mut errors = ERROR_LOG.lock().unwrap();
+        if !errors.is_empty() {
+            Window::new("Errors").show(ctx, |ui| {
+                for e in errors.iter() {
+                    ui.label(e);
+                }
+                if ui.button("Close").clicked() {
+                    errors.clear();
+                }
+            });
+        }
     }
 
     if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::S)) {

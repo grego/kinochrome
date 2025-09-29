@@ -12,6 +12,7 @@ use vulkano::buffer::Subbuffer;
 use vulkano::image::sampler::{Filter, SamplerCreateInfo};
 
 use std::collections::BTreeMap;
+use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::ops::Range;
@@ -21,6 +22,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Instant;
 use std::{array, env};
+
+/// List of formated errors that occured.
+pub static ERROR_LOG: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 /// Application state
 pub struct State {
@@ -140,7 +144,7 @@ impl State {
                     .map_err(Into::into)
                     .and_then(|f| ciborium::into_writer(&self.files, f))
                 {
-                    eprintln!("{e}");
+                    log_error(&e, &format!("saving file {}", item.to_string_lossy()));
                 }
             } else {
                 match File::open(&item)
@@ -151,7 +155,7 @@ impl State {
                         self.files = files;
                     }
                     Err(e) => {
-                        eprintln!("{e}");
+                        log_error(&e, &format!("opening file {}", item.to_string_lossy()));
                     }
                 }
                 for (_, file) in self.files.iter_mut() {
@@ -168,7 +172,7 @@ impl State {
             let videofile = match videofile {
                 Ok(video) => video,
                 Err(e) => {
-                    eprintln!("Error parsing {:?}: {e}", filename);
+                    log_error(&e, &format!("importing file {filename}"));
                     continue;
                 }
             };
@@ -520,4 +524,11 @@ impl State {
         }
         let _ = self.cmd_send.send(VideoCommand::Trim(self.trim.clone()));
     }
+}
+
+/// Print error to the standard error and log for eventual display to the user.
+pub fn log_error(e: &dyn Error, context: &str) {
+    let s = format!("Error {context}: {e}");
+    eprintln!("{s}");
+    ERROR_LOG.lock().unwrap().push(s);
 }

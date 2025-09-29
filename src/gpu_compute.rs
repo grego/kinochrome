@@ -156,7 +156,6 @@ impl Compute {
 
         let shader = shader.specialize(spec.make_const_map()).unwrap();
         let entry_point = shader.entry_point("main").unwrap();
-        dbg!(entry_point.info().push_constant_requirements);
         let compute_pipeline = {
             let stage = PipelineShaderStageCreateInfo::new(entry_point);
             let layout = PipelineLayout::new(

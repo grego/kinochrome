@@ -1,5 +1,6 @@
 use crate::gpu_compute::{Compute, GpuContext, make_output_buffer};
 use crate::import::{AudioFrame, Frames, VideoCommand, VideoFile, decode_image, read_frames};
+use crate::state::log_error;
 
 use std::array;
 use std::fs::{self, File, read_to_string};
@@ -158,7 +159,7 @@ pub fn encode(
             }
         }
         if let Err(e) = encode_file(
-            name,
+            &name,
             video,
             gpu_context.clone(),
             &state,
@@ -166,14 +167,14 @@ pub fn encode(
             resize,
             fps,
         ) {
-            eprintln!("{e}");
+            log_error(&e, &format!("exporting {name}"));
         }
     }
     state.lock().unwrap().running = false;
 }
 
 fn encode_file(
-    name: String,
+    name: &str,
     video: VideoFile,
     gpu_context: GpuContext,
     state: &Mutex<EncodingState>,
@@ -367,14 +368,15 @@ pub fn encode_cdngs(files: Vec<(String, VideoFile)>, state: Arc<Mutex<EncodingSt
                 break;
             }
         }
-        if let Err(e) = encode_cdng(name, mlv, &state) {
-            eprintln!("{e}");
+        if let Err(e) = encode_cdng(&name, mlv, &state) {
+            log_error(&e, &format!("exporting {name}"));
         }
     }
     state.lock().unwrap().running = false;
 }
 
-fn encode_cdng(mut name: String, video: VideoFile, state: &Mutex<EncodingState>) -> Result<()> {
+fn encode_cdng(name: &str, video: VideoFile, state: &Mutex<EncodingState>) -> Result<()> {
+    let mut name = name.to_string();
     let suffix = ".MLV";
     if name.ends_with(suffix) {
         name.truncate(name.len() - suffix.len());
@@ -550,7 +552,7 @@ pub fn read_recipes(directory: &str) -> Result<(Vec<Recipe>, Vec<Recipe>)> {
         let recipe: Recipe = match toml::from_str(&read_to_string(entry.path())?) {
             Ok(recipe) => recipe,
             Err(e) => {
-                eprintln!("Error parsing the recipe {:?}: {e}", entry.path());
+                log_error(&e, &format!("parsing the recipe {:?}", entry.path()));
                 continue;
             }
         };

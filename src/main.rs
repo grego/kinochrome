@@ -19,7 +19,7 @@ use encoding::EncodingDialog;
 use gpu_compute::{Compute, GpuContext};
 use import::{FocusPixelMap, parse_videos, read_frames};
 use renderer::Renderer;
-use state::State;
+use state::{State, log_error};
 
 use std::error::Error;
 use std::fs::File;
@@ -240,7 +240,7 @@ fn main() -> Result<(), impl Error> {
     let (video_recipes, audio_recipes) = match encoding::read_recipes(RECIPE_DIR) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("Unable to read recipes: {e}");
+            log_error(&e, "reading recipes");
             Default::default()
         }
     };

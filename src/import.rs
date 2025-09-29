@@ -24,6 +24,7 @@ use std::sync::{
 
 use crate::color_utils::{ColorParams, Illuminant, array_to_mat3, identity_mat, inv3, transpose};
 use crate::gpu_compute::{PushConstantData, Specialization, make_upload_buffer};
+use crate::state::log_error;
 
 /// Video file
 #[derive(Clone, Deserialize, Serialize)]
@@ -141,7 +142,7 @@ pub fn parse_videos(
             .to_string_lossy()
             .into();
         if let Err(e) = send.send((parse_video(&path, fpm.clone()), filename, switch)) {
-            eprint!("{e}");
+            eprintln!("{e}");
             return;
         }
     }
@@ -564,7 +565,7 @@ pub fn read_frames(
             &video.focus_pixels,
             pan,
         ) {
-            eprint!("{e}");
+            log_error(&e, &format!("decoding frame {i}"));
         };
         drop(output);
 
@@ -784,7 +785,7 @@ pub fn load_focus_pixels(map: FocusPixelMap, id: u32, w: u32, h: u32) -> Arc<[[u
             let focus_pixels = match read_fpm(&fpmfile) {
                 Ok(fp) => fp,
                 Err(e) => {
-                    eprintln!("Error reading {}: {}", fpmfile, e);
+                    log_error(&e, &format!("reading {fpmfile}"));
                     Vec::with_capacity(0)
                 }
             };

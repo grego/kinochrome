@@ -10,14 +10,14 @@ repository = "https://git.sr.ht/~grego/kinochrome"
 # Crates connected to the Kinochrome project
 ljpeg = "0.1.2"
 mlv = { version = "0.1.0", features = ["serde"] }
-dng = "1.5.3"
+dng = "1.5.4"
 packbytes = "0.2"
 
 bytemuck = { version = "1.23", features = ["derive"] }
 vulkano = { version = "0.35", features = ["serde"] }
 winit = { version = "0.30", default-features = false, features = ["x11", "wayland", "wayland-dlopen", "rwh_06"] }
 egui = { version = "0.32", features = ["serde"] }
-egui-winit = { version = "0.32", default-features = false, features = ["x11", "wayland"] }
+egui-winit = { version = "0.32", default-features = false, features = ["x11", "wayland", "clipboard"] }
 serde = { version = "1", features = ["derive", "rc"] }
 toml = "0.9"
 ciborium = "0.2"
