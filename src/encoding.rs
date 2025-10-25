@@ -314,6 +314,33 @@ fn create_wav(name: &str, mlv: &VideoFile) -> Result<bool> {
     out.write_all(&16_u32.to_le_bytes())?;
     wi.write_packed(&mut out)?;
 
+    let (num, den) = ((mlv.fps * 1000.0) as i32, 1000);
+
+    let ixml = format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+    <BWFXML>
+    <IXML_VERSION>1.5</IXML_VERSION>
+    <PROJECT>Kinochrome</PROJECT>
+    <NOTE></NOTE>
+    <CIRCLED>FALSE</CIRCLED>
+    <BLACKMAGIC-KEYWORDS></BLACKMAGIC-KEYWORDS>
+    <TAPE>1</TAPE>
+    <SCENE>1</SCENE>
+    <BLACKMAGIC-SHOT>1</BLACKMAGIC-SHOT>
+    <TAKE>1</TAKE>
+    <BLACKMAGIC-ANGLE>ms</BLACKMAGIC-ANGLE>
+    <SPEED>
+    <MASTER_SPEED>{num}/{den}</MASTER_SPEED>
+    <CURRENT_SPEED>{num}/{den}</CURRENT_SPEED>
+    <TIMECODE_RATE>{num}/{den}</TIMECODE_RATE>
+    <TIMECODE_FLAG>NDF</TIMECODE_FLAG>
+    </SPEED>
+    </BWFXML>"
+    );
+    out.write_all(b"iXML")?;
+    out.write_all(&(ixml.len() as u32).to_le_bytes())?;
+    out.write_all(ixml.as_bytes())?;
+
     out.write_all(b"data")?;
     out.write_all(&size.to_le_bytes())?;
 
