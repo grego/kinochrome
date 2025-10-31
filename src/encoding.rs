@@ -307,15 +307,8 @@ fn create_wav(name: &str, mlv: &VideoFile) -> Result<bool> {
 
     let mut vidfile = File::open(&mlv.path)?;
     let mut out = BufWriter::new(File::create(name)?);
-    out.write_all(b"RIFF")?;
-    out.write_all(&((size + 36) as u32).to_le_bytes())?;
-    out.write_all(b"WAVE")?;
-    out.write_all(b"fmt ")?;
-    out.write_all(&16_u32.to_le_bytes())?;
-    wi.write_packed(&mut out)?;
 
     let (num, den) = ((mlv.fps * 1000.0) as i32, 1000);
-
     let ixml = format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
     <BWFXML>
@@ -337,9 +330,17 @@ fn create_wav(name: &str, mlv: &VideoFile) -> Result<bool> {
     </SPEED>
     </BWFXML>"
     );
+
+    out.write_all(b"RIFF")?;
+    out.write_all(&((size + 36 + 1024 + 8) as u32).to_le_bytes())?;
+    out.write_all(b"WAVE")?;
     out.write_all(b"iXML")?;
-    out.write_all(&(ixml.len() as u32).to_le_bytes())?;
+    out.write_all(&(1024_u32).to_le_bytes())?;
     out.write_all(ixml.as_bytes())?;
+    out.write_all(&vec![0; 1024 - ixml.len()])?;
+    out.write_all(b"fmt ")?;
+    out.write_all(&16_u32.to_le_bytes())?;
+    wi.write_packed(&mut out)?;
 
     out.write_all(b"data")?;
     out.write_all(&size.to_le_bytes())?;
