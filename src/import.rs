@@ -14,6 +14,7 @@ use vulkano::memory::allocator::MemoryAllocator;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, BufReader, ErrorKind, Read, Seek, SeekFrom};
+use std::iter;
 use std::mem::swap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -90,7 +91,7 @@ pub enum Frames<T = ()> {
 }
 
 /// Single MLV frame
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 pub struct MlvVideoFrame {
     /// Position in the file
     pub pos: u64,
@@ -180,15 +181,8 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
     let mut white_level = 1.0;
     let mut cam_matrix = identity_mat();
     let mut temperature = 6503;
-    let frame_count = header.video_frame_count as usize;
-    let mut frames = vec![
-        MlvVideoFrame {
-            pos: 0,
-            len: 0,
-            pan: [0, 0]
-        };
-        header.video_frame_count as usize
-    ];
+    let mut frame_count = header.video_frame_count as usize;
+    let mut frames = vec![MlvVideoFrame::default(); header.video_frame_count as usize];
     let mut audio_frames = Vec::with_capacity(header.audio_frame_count as usize);
     let mut wav_info = None;
     let mut raw_info = None;
@@ -254,7 +248,8 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
                 }
                 let i = v.number as usize;
                 if i >= frame_count {
-                    continue;
+                    frames.extend(iter::repeat(MlvVideoFrame::default()).take(i + 1 - frame_count));
+                    frame_count = i + 1;
                 }
                 let pan = [v.pan_x, v.pan_y];
                 let pos = frame.payload.start();

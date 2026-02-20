@@ -500,15 +500,16 @@ fn encode_single_dng(
 
     let mut output = vec![0; width * height];
     while let Ok((payload, i, pan)) = recv.recv() {
-        decode_image(
+        if let Err(e) = decode_image(
             &payload,
             &mut output,
             (video.compression, video.bits_per_pixel),
             [width, height],
             &video.focus_pixels,
             pan,
-        )
-        .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+        ) {
+            log_error(&e, &format!("decoding frame {i}"));
+        };
         let encoded = encoder.encode(&output).unwrap();
         let len = encoded.len();
         let mut ifd = ifd.clone();
