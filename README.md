@@ -1,5 +1,6 @@
+<img src="logo.png" alt="logo" width="200"/>
+
 GPU accelerated raw video processing
-![logo](logo.png)
 
 Kinochrome is currently in an alpha state. Expect bugs, which you are encouraged to report.
 
