@@ -14,7 +14,6 @@ use vulkano::memory::allocator::MemoryAllocator;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, BufReader, ErrorKind, Read, Seek, SeekFrom};
-use std::iter;
 use std::mem::swap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -248,7 +247,10 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
                 }
                 let i = v.number as usize;
                 if i >= frame_count {
-                    frames.extend(iter::repeat(MlvVideoFrame::default()).take(i + 1 - frame_count));
+                    frames.extend(std::iter::repeat_n(
+                        MlvVideoFrame::default(),
+                        i + 1 - frame_count,
+                    ));
                     frame_count = i + 1;
                 }
                 let pan = [v.pan_x, v.pan_y];

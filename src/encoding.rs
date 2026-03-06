@@ -4,7 +4,7 @@ use crate::state::log_error;
 
 use std::array;
 use std::fs::{self, File, read_to_string};
-use std::io::{BufWriter, Error, ErrorKind, Read, Result, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Error, Read, Result, Seek, SeekFrom, Write};
 use std::panic;
 use std::path::Path;
 use std::process::{Command, Stdio};
