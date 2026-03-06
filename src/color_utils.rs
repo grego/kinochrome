@@ -1,5 +1,4 @@
 use core::f32;
-use std::array;
 
 use serde::{Deserialize, Serialize};
 use vulkano::padded::Padded;
@@ -210,7 +209,7 @@ fn ch_to_xy([c, h, y]: [f32; 3]) -> [f32; 2] {
 }
 
 // Numerically stable 2x2 determinant
-fn det2(a: f32, b: f32, c: f32, d: f32) -> f32 {
+const fn det2(a: f32, b: f32, c: f32, d: f32) -> f32 {
     let bc = b * c;
     let err = (-b).mul_add(c, bc);
     let det = a.mul_add(d, -bc);
@@ -218,19 +217,33 @@ fn det2(a: f32, b: f32, c: f32, d: f32) -> f32 {
 }
 
 /// Inverse of a 3x3 matrix
-pub fn inv3(m: Mat<3>) -> Mat<3> {
-    let inv = array::from_fn(|i| {
-        array::from_fn(|j| {
-            det2(
+pub const fn inv3(m: Mat<3>) -> Mat<3> {
+    let mut inv = [[0.0; 3]; 3];
+    let mut i = 0;
+    while i < 3 {
+        let mut j = 0;
+        while j < 3 {
+            inv[i][j] = det2(
                 m[(j + 1) % 3][(i + 1) % 3],
                 m[(j + 1) % 3][(i + 2) % 3],
                 m[(j + 2) % 3][(i + 1) % 3],
                 m[(j + 2) % 3][(i + 2) % 3],
-            )
-        })
-    });
+            );
+            j += 1;
+        }
+        i += 1;
+    }
     let det = m[0][0] * inv[0][0] + m[0][1] * inv[1][0] + m[0][2] * inv[2][0];
-    inv.map(|col| col.map(|a| a / det))
+
+    while i < 3 {
+        let mut j = 0;
+        while j < 3 {
+            inv[i][j] /= det;
+            j += 1;
+        }
+        i += 1;
+    }
+    inv
 }
 
 const fn matvecmul<const N: usize>(m: Mat<N>, v: [f32; N]) -> [f32; N] {
