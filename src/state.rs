@@ -356,7 +356,12 @@ impl State {
             .unwrap();
         self.recv = rcv;
 
-        self.compute = Compute::new(self.extent, video.spec, self.gpu_context.clone());
+        self.compute = Compute::new(
+            self.extent,
+            video.spec,
+            self.gpu_context.clone(),
+            video.lut.as_deref(),
+        );
         for id in self.image_ids.iter().flatten() {
             gui.unregister_image(*id);
         }

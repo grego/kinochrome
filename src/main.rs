@@ -20,6 +20,7 @@ use gpu_compute::{Compute, GpuContext};
 use import::{FocusPixelMap, parse_videos, read_frames};
 use renderer::Renderer;
 use state::{State, log_error};
+use vulkano::device::DeviceFeatures;
 
 use std::error::Error;
 use std::fs::File;
@@ -116,6 +117,7 @@ fn main() -> Result<(), impl Error> {
 
     let device_extensions = DeviceExtensions {
         khr_swapchain: true,
+        khr_16bit_storage: true,
         ..DeviceExtensions::empty()
     };
     let (physical_device, queue_family_index) = instance
@@ -149,10 +151,13 @@ fn main() -> Result<(), impl Error> {
         physical_device.properties().device_type,
     );
 
+    let mut device_features = DeviceFeatures::default();
+    device_features.storage_buffer16_bit_access = true;
     let (device, mut queues) = Device::new(
         physical_device,
         DeviceCreateInfo {
             enabled_extensions: device_extensions,
+            enabled_features: device_features,
             queue_create_infos: vec![QueueCreateInfo {
                 queue_family_index,
                 ..Default::default()
@@ -183,8 +188,12 @@ fn main() -> Result<(), impl Error> {
     let cspirv = read_file_as_u32s("shaders/comp.spv").unwrap();
     let shader =
         unsafe { ShaderModule::new(device.clone(), ShaderModuleCreateInfo::new(&cspirv)).unwrap() };
+    let lspirv = read_file_as_u32s("shaders/lut.spv").unwrap();
+    let lut_shader =
+        unsafe { ShaderModule::new(device.clone(), ShaderModuleCreateInfo::new(&lspirv)).unwrap() };
     let gpu_context = GpuContext {
         shader,
+        lut_shader,
         queue,
         memory_alloc,
         descriptor_set_alloc,
@@ -213,7 +222,7 @@ fn main() -> Result<(), impl Error> {
 
     let extent = [1, 1];
     let ideal_frame_len = 1_000_000.0;
-    let compute = Compute::new(extent, Default::default(), gpu_context.clone());
+    let compute = Compute::new(extent, Default::default(), gpu_context.clone(), None);
 
     let open_dialog = FileDialog::new()
         .add_file_filter(

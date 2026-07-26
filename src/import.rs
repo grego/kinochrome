@@ -74,6 +74,8 @@ pub struct VideoFile {
     pub selected: bool,
     /// The first and the last frame the video should be trimmed to.
     pub trim: Range<usize>,
+    /// A look up table for pixels
+    pub lut: Option<Vec<u16>>,
 }
 
 /// A map of focus pixels, indexed by camera model, width and height
@@ -167,14 +169,13 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
     let compression = match header.video_class {
         1 => Compression::None(false),
         33 => Compression::LJpeg,
-        _ => {
+        c => {
             return Err(io::Error::new(
                 ErrorKind::Unsupported,
-                "unsuported compression",
+                format!("unsuported compression {c}"),
             ));
         }
     };
-    dbg!(header);
 
     let mut black_level = 0.0;
     let mut white_level = 1.0;
@@ -329,6 +330,7 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
         current_frame: 0,
         trim: 0..frame_count,
         selected: false,
+        lut: None,
     })
 }
 
@@ -359,12 +361,13 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
     let ifd = dng.get_ifd0();
     let mut first_red = [0, 0];
     let mut black_level = 0.0;
-    let mut white_level = 1.0;
+    let mut white_level = None;
     let mut cam_matrix = identity_mat::<3>();
     let (mut width, mut height) = (0, 0);
     let mut fps = 24.0;
     let mut bits_per_pixel = 14;
     let mut compression = Compression::None(true);
+    let mut lut = None;
     let err = || io::Error::other("incorrect IFD tag value type");
     let mut read_ifd = |ifd: &Ifd| {
         for entry in ifd.entries() {
@@ -399,8 +402,18 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
             } else if tag == ifd::BlackLevel.tag {
                 black_level = entry.value.as_u32().ok_or_else(err)? as f32 / ((1 << 16) - 1) as f32;
             } else if tag == ifd::WhiteLevel.tag {
-                white_level = entry.value.as_u32().ok_or_else(err)? as f32 / ((1 << 16) - 1) as f32;
-            } else if tag == ifd::ColorMatrix1.tag {
+                white_level =
+                    Some(entry.value.as_u32().ok_or_else(err)? as f32 / ((1 << 16) - 1) as f32);
+            } else if tag == ifd::LinearizationTable.tag {
+                let l: Vec<_> = entry
+                    .value
+                    .as_list()
+                    .filter_map(|v| v.as_u32())
+                    .map(|v| v as u16)
+                    .collect();
+                lut = Some(l);
+            } else if tag == ifd::ColorMatrix2.tag {
+                println!("matrix found");
                 let cm: Vec<_> = entry
                     .value
                     .as_list()
@@ -424,9 +437,7 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
         read_ifd(ifd)?;
     }
 
-    if white_level == 1.0 {
-        white_level = ((1 << bits_per_pixel) as f32) / ((1 << 16) as f32);
-    }
+    let white_level = white_level.unwrap_or(((1 << bits_per_pixel) as f32) / ((1 << 16) as f32));
     let stretch = 1.0 / (white_level - black_level);
     let spec = Specialization {
         first_red,
@@ -467,6 +478,7 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
         current_frame: 0,
         selected: false,
         trim: 0..len,
+        lut,
     })
 }
 

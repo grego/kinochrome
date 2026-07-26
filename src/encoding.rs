@@ -192,6 +192,21 @@ fn encode_file(
     let wav_name = format!("{}.wav", name);
     let has_audio = create_wav(&wav_name, &video)?;
 
+    let [w, h] = resize.unwrap_or([width as u32, height as u32]);
+    if resize.is_none() && column_binning > 1 {
+        resize = Some([width as u32 * column_binning as u32, height as u32]);
+    }
+    let output_buffers: [_; 2] = array::from_fn(|_| {
+        make_output_buffer(w as usize, h as usize, gpu_context.memory_alloc.clone())
+    });
+
+    let mut compute = Compute::new(
+        [width as u32, height as u32],
+        spec,
+        gpu_context,
+        video.lut.as_deref(),
+    );
+
     let (cmd_send, cmd_recv) = channel();
     thread::spawn(move || read_frames(cloned_alloc, cmd_recv, false));
     let (send, recv) = sync_channel(3);
@@ -199,16 +214,6 @@ fn encode_file(
         .send(VideoCommand::ChangeFile(video.into(), send))
         .unwrap();
     cmd_send.send(VideoCommand::Rewind(frames.start)).unwrap();
-
-    if resize.is_none() && column_binning > 1 {
-        resize = Some([width as u32 * column_binning as u32, height as u32]);
-    }
-    let [w, h] = resize.unwrap_or([width as u32, height as u32]);
-    let output_buffers: [_; 2] = array::from_fn(|_| {
-        make_output_buffer(w as usize, h as usize, gpu_context.memory_alloc.clone())
-    });
-
-    let mut compute = Compute::new([width as u32, height as u32], spec, gpu_context);
 
     let file_stem = Path::new(&name)
         .file_stem()

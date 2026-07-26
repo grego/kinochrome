@@ -17,7 +17,7 @@ use vulkano::{
     format::Format,
     image::{
         Image, ImageCreateInfo, ImageType, ImageUsage,
-        sampler::{Sampler, SamplerAddressMode, SamplerCreateInfo},
+        sampler::{Sampler, SamplerCreateInfo},
         view::ImageView,
     },
     memory::allocator::{
@@ -82,9 +82,12 @@ pub struct Compute {
     out_images: [Arc<ImageView>; 2],
     compute_pipeline: Arc<ComputePipeline>,
     descriptor_sets: [Arc<DescriptorSet>; 2],
+    lut_buffer: Option<Subbuffer<[u16]>>,
+    lut_pipeline: Arc<ComputePipeline>,
     queue: Arc<Queue>,
     memory_alloc: Arc<StandardMemoryAllocator>,
     command_buffer_alloc: Arc<dyn CommandBufferAllocator>,
+    descriptor_set_alloc: Arc<dyn DescriptorSetAllocator>,
     extent: [u32; 3],
     specialization: Specialization,
     future: Option<ComputeFuture>,
@@ -95,6 +98,8 @@ pub struct Compute {
 pub struct GpuContext {
     /// Compute shader
     pub shader: Arc<ShaderModule>,
+    /// LUT shader
+    pub lut_shader: Arc<ShaderModule>,
     /// Vulkan queue
     pub queue: Arc<Queue>,
     /// Memory allocator
@@ -109,9 +114,15 @@ type Extent = [u32; 2];
 
 impl Compute {
     /// Create a new Compute struct for a video with the given specialization
-    pub fn new(extent: Extent, spec: Specialization, gpu_context: GpuContext) -> Self {
+    pub fn new(
+        extent: Extent,
+        spec: Specialization,
+        gpu_context: GpuContext,
+        lut: Option<&[u16]>,
+    ) -> Self {
         let GpuContext {
             shader,
+            lut_shader,
             queue,
             memory_alloc,
             descriptor_set_alloc,
@@ -176,7 +187,6 @@ impl Compute {
         let sampler = Sampler::new(
             device.clone(),
             SamplerCreateInfo {
-                address_mode: [SamplerAddressMode::ClampToEdge; 3],
                 unnormalized_coordinates: true,
                 ..Default::default()
             },
@@ -197,6 +207,31 @@ impl Compute {
             .unwrap()
         });
 
+        let entry_point = lut_shader.entry_point("main").unwrap();
+        let mut lut_buffer = None;
+        if let Some(table) = lut {
+            let lb = make_upload_buffer(1 << 12, 1, memory_alloc.clone());
+            lb.write().unwrap()[..table.len()].copy_from_slice(table);
+            lut_buffer = Some(lb);
+        }
+
+        let lut_pipeline = {
+            let stage = PipelineShaderStageCreateInfo::new(entry_point);
+            let layout = PipelineLayout::new(
+                device.clone(),
+                PipelineDescriptorSetLayoutCreateInfo::from_stages([&stage])
+                    .into_pipeline_layout_create_info(device.clone())
+                    .unwrap(),
+            )
+            .unwrap();
+            ComputePipeline::new(
+                device.clone(),
+                None,
+                ComputePipelineCreateInfo::stage_layout(stage, layout),
+            )
+            .unwrap()
+        };
+
         let extent = out_images[0].image().extent();
         Self {
             in_buffer: None,
@@ -204,9 +239,12 @@ impl Compute {
             out_images,
             compute_pipeline,
             descriptor_sets,
+            lut_pipeline,
+            lut_buffer,
             extent,
             memory_alloc,
             command_buffer_alloc,
+            descriptor_set_alloc,
             queue,
             specialization: spec,
             future: None,
@@ -238,6 +276,34 @@ impl Compute {
         if let Some(buffer) = buffer {
             // buffer is behind a shared reference, so this is cheap
             self.in_buffer = Some(buffer.clone());
+            if let Some(ref lut) = self.lut_buffer {
+                let desc_layout = &self.lut_pipeline.layout().set_layouts()[0];
+                let lutds = DescriptorSet::new(
+                    self.descriptor_set_alloc.clone(),
+                    desc_layout.clone(),
+                    [
+                        WriteDescriptorSet::buffer(0, buffer.clone()),
+                        WriteDescriptorSet::buffer(1, lut.clone()),
+                    ],
+                    [],
+                )
+                .unwrap();
+                unsafe {
+                    builder
+                        .bind_pipeline_compute(self.lut_pipeline.clone())
+                        .unwrap()
+                        .bind_descriptor_sets(
+                            PipelineBindPoint::Compute,
+                            self.lut_pipeline.layout().clone(),
+                            0,
+                            lutds,
+                        )
+                        .unwrap()
+                        .dispatch([self.extent[0] * self.extent[1] / 256, 1, 1])
+                        .unwrap();
+                }
+            }
+
             builder
                 .copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
                     buffer,
@@ -363,7 +429,7 @@ pub fn make_upload_buffer(
     Buffer::new_slice(
         alloc,
         BufferCreateInfo {
-            usage: BufferUsage::TRANSFER_SRC,
+            usage: BufferUsage::TRANSFER_SRC | BufferUsage::STORAGE_BUFFER,
             ..Default::default()
         },
         AllocationCreateInfo {
@@ -443,9 +509,12 @@ impl Clone for Compute {
             out_images: self.out_images.clone(),
             compute_pipeline: self.compute_pipeline.clone(),
             descriptor_sets: self.descriptor_sets.clone(),
+            lut_pipeline: self.lut_pipeline.clone(),
+            lut_buffer: self.lut_buffer.clone(),
             queue: self.queue.clone(),
             memory_alloc: self.memory_alloc.clone(),
             command_buffer_alloc: self.command_buffer_alloc.clone(),
+            descriptor_set_alloc: self.descriptor_set_alloc.clone(),
             extent: self.extent,
             specialization: self.specialization,
             future: None,
