@@ -75,7 +75,7 @@ vec3 srgb_from_linear(vec3 linear) {
 void main() {
 	uvec2 pos = gl_GlobalInvocationID.xy;
 
-	const vec3 c_cam = (debayer_mhc(pos) - vec3(BLACK_LEVEL)) * STRETCH;
+	const vec3 c_cam = debayer_mhc(pos) * STRETCH;
 	vec3 col_xyz = params.cam_matrix * c_cam;
 	col_xyz *= pow(2.0, params.exposure);
 
@@ -93,7 +93,7 @@ void main() {
 		jch = dt_UCS_HCB_to_JCH(vec3(hcb.x, inv * pw));
  	}
 	const vec3 col0 = xyz_to_rec2020 * xyY_to_XYZ(dt_UCS_JCH_to_xyY(jch, 1.0));
-	//const vec3 col0 = xyz_to_rec2020 * col_xyz;
+	// const vec3 col0 = xyz_to_rec2020 * col_xyz;
 
 	//float norm = max(max(col0.r, col0.g), col0.b);
 	//norm = clamp(norm, 0.18*pow(2., -6), 0.18*pow(2., 5.2));

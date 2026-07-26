@@ -1,6 +1,19 @@
 float fetch(ivec2 pos) {
+    ivec2 size = textureSize(rawimg, 0);
+    if (pos.x < 0) {
+        pos.x = -pos.x;
+    }
+    if (pos.x >= size.x) {
+        pos.x = size.x - (pos.x - size.x) - 2;
+    }
+    if (pos.y < 0) {
+        pos.y = -pos.y;
+    }
+    if (pos.y >= size.y) {
+        pos.y = size.y - (pos.y - size.y) - 2;
+    }
     highp float v = texture(rawimg, pos).r;
-    return v; 
+    return v - BLACK_LEVEL; 
 }
 
 vec3 debayer_linear(uvec2 pos) {
