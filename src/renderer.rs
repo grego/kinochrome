@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use bytemuck::AnyBitPattern;
-use egui::{ClippedPrimitive, Rect, TexturesDelta, epaint::Primitive};
+use egui::{ClippedPrimitive, Id, LayerId, Rect, TexturesDelta, UiBuilder, epaint::Primitive};
 use foldhash::HashMap;
 use vulkano::{
     DeviceSize, NonZeroDeviceSize,
@@ -246,6 +246,18 @@ impl Renderer {
     /// Access egui's context (which can be used to e.g. set fonts, visuals etc)
     pub fn context(&self) -> egui::Context {
         self.egui_ctx.clone()
+    }
+
+    /// Return the root Ui for rendering
+    pub fn root_ui(&self) -> egui::Ui {
+        let ctx = self.egui_ctx.clone();
+        egui::Ui::new(
+            ctx.clone(),
+            Id::new((ctx.viewport_id(), "__top_ui")),
+            UiBuilder::new()
+                .layer_id(LayerId::background())
+                .max_rect(ctx.viewport_rect()),
+        )
     }
 
     /// Get the GUI render pass

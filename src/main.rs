@@ -28,11 +28,12 @@ use std::time::Instant;
 
 use std::collections::BTreeMap;
 use std::io::{self, BufReader, ErrorKind, Read};
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc::{channel, sync_channel};
 use std::thread;
 
-use egui_file_dialog::FileDialog;
+use egui_file_dialog::{FileDialog, Filter};
 use vulkano::{
     Validated, VulkanError, VulkanLibrary,
     command_buffer::allocator::{
@@ -227,7 +228,7 @@ fn main() -> Result<(), impl Error> {
     let open_dialog = FileDialog::new()
         .add_file_filter(
             "Kinochrome projects",
-            Arc::new(|path| {
+            Filter::new(|path: &Path| {
                 path.extension()
                     .unwrap_or_default()
                     .eq_ignore_ascii_case("kchrp")
@@ -238,7 +239,7 @@ fn main() -> Result<(), impl Error> {
     let import_dialog = FileDialog::new()
         .add_file_filter(
             "MLV files",
-            Arc::new(|path| {
+            Filter::new(|path: &Path| {
                 path.extension()
                     .unwrap_or_default()
                     .eq_ignore_ascii_case("mlv")

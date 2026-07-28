@@ -269,7 +269,7 @@ impl State {
         self.import_dialog.update(&ctx);
 
         let prev_pc = self.pc;
-        gui::layout(self, &ctx);
+        gui::layout(self, &mut renderer.root_ui());
 
         if self.picker_mode
             && let Some(xy) = self.picked_point.take()

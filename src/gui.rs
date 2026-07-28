@@ -4,17 +4,17 @@ use crate::state::{ERROR_LOG, State};
 
 use egui::load::SizedTexture;
 use egui::{
-    Button, CentralPanel, Color32, ComboBox, Context, CursorIcon, DragValue, Event, Id, Image,
-    ImageSource, Key, MenuBar, Modifiers, Pos2, ProgressBar, Rect, Response, Rgba, ScrollArea,
-    Sense, SidePanel, Slider, TopBottomPanel, Ui, Vec2, Window, style,
+    Button, CentralPanel, Color32, ComboBox, CursorIcon, DragValue, Event, Id, Image, ImageSource,
+    Key, MenuBar, Modifiers, Panel, Pos2, ProgressBar, Rect, Response, Rgba, ScrollArea, Sense,
+    Slider, Ui, Vec2, Window, style,
 };
 
 use std::f32::consts::PI;
 use std::time::Instant;
 
 /// GUI layout
-pub fn layout(s: &mut State, ctx: &Context) {
-    TopBottomPanel::top("top panel").show(ctx, |ui| {
+pub fn layout(s: &mut State, ui: &mut Ui) {
+    Panel::top("top panel").show(ui, |ui| {
         MenuBar::new().ui(ui, |ui| {
             ui.menu_button("File", |ui| {
                 if ui.button("Open").on_hover_text("Ctrl + O").clicked() {
@@ -62,7 +62,7 @@ pub fn layout(s: &mut State, ctx: &Context) {
         });
     });
 
-    SidePanel::left("File Panel").show(ctx, |ui| {
+    Panel::left("File Panel").show(ui, |ui| {
         ScrollArea::vertical().show(ui, |ui| {
             let mut last_selected = 0;
             let mut select_range = None;
@@ -113,9 +113,9 @@ pub fn layout(s: &mut State, ctx: &Context) {
         });
     });
 
-    SidePanel::right("Side Panel")
-        .default_width(150.0)
-        .show(ctx, |ui| {
+    Panel::right("Side Panel")
+        .default_size(150.0)
+        .show(ui, |ui| {
             ui.heading("corrections");
             ui.add(
                 Slider::new(&mut s.pc.exposure, -5.0..=5.0)
@@ -168,7 +168,7 @@ pub fn layout(s: &mut State, ctx: &Context) {
                 color_rect(ui, Rgba::from_rgb(r, g, b).into());
                 if ui.add(Button::new("Pick white")).clicked() {
                     s.picker_mode = true;
-                    ctx.set_cursor_icon(CursorIcon::Crosshair);
+                    ui.set_cursor_icon(CursorIcon::Crosshair);
                 }
             });
             ui.separator();
@@ -217,9 +217,9 @@ pub fn layout(s: &mut State, ctx: &Context) {
             );
         });
 
-    TopBottomPanel::bottom("Bottom panel")
+    Panel::bottom("Bottom panel")
         .show_separator_line(false)
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             if s.frames_len == 0 {
                 ui.disable();
             }
@@ -291,7 +291,7 @@ pub fn layout(s: &mut State, ctx: &Context) {
             });
         });
 
-    CentralPanel::default().show(ctx, |ui| {
+    CentralPanel::default().show(ui, |ui| {
         let avs = ui.available_size();
         let [width, height] = s.extent;
 
@@ -365,26 +365,21 @@ pub fn layout(s: &mut State, ctx: &Context) {
     if running {
         let id = Id::new("Export");
         let title = format!("Exporting file {}/{}", es.cur_file, es.num_files);
-        Window::new(&title)
-            .id(id)
-            .collapsible(true)
-            .show(ctx, |ui| {
-                ui.add(
-                    ProgressBar::new(es.cur_frame as f32 / es.num_frames as f32).show_percentage(),
-                );
-                ui.vertical_centered(|ui| {
-                    if ui.button("Abort").clicked() {
-                        es.abort = true;
-                    }
-                });
+        Window::new(&title).id(id).collapsible(true).show(ui, |ui| {
+            ui.add(ProgressBar::new(es.cur_frame as f32 / es.num_frames as f32).show_percentage());
+            ui.vertical_centered(|ui| {
+                if ui.button("Abort").clicked() {
+                    es.abort = true;
+                }
             });
+        });
     }
     drop(es);
 
     if !running && s.encoding_dialog.shown {
         Window::new("Export videos")
             .open(&mut s.encoding_dialog.shown)
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut s.encoding_dialog.allow_resize, "Resize");
                     if !s.encoding_dialog.allow_resize {
@@ -438,7 +433,7 @@ pub fn layout(s: &mut State, ctx: &Context) {
     if s.about_dialog_shown {
         Window::new("About")
             .open(&mut s.about_dialog_shown)
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.heading(format!(
                     "{} {}",
                     env!("CARGO_CRATE_NAME"),
@@ -452,7 +447,7 @@ pub fn layout(s: &mut State, ctx: &Context) {
     {
         let mut errors = ERROR_LOG.lock().unwrap();
         if !errors.is_empty() {
-            Window::new("Errors").show(ctx, |ui| {
+            Window::new("Errors").show(ui, |ui| {
                 for e in errors.iter() {
                     ui.label(e);
                 }
@@ -463,58 +458,58 @@ pub fn layout(s: &mut State, ctx: &Context) {
         }
     }
 
-    if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::S)) {
+    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::S)) {
         s.open_dialog.save_file();
     }
-    if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::O)) {
+    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::O)) {
         s.open_dialog.save_file();
     }
-    if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::I)) {
+    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::I)) {
         s.import_dialog.pick_multiple();
     }
-    if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::E)) {
+    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::E)) {
         s.encoding_dialog.shown = true;
         s.encoding_dialog.resize = s.extent;
         s.encoding_dialog.fps = 1_000_000.0 / s.ideal_frame_len;
     }
-    if ctx.input(|i| i.key_pressed(Key::Space)) {
+    if ui.input(|i| i.key_pressed(Key::Space)) {
         s.paused = !s.paused;
         s.frame_start = Instant::now();
         s.vid_frame_start = Instant::now();
     }
 
-    if ctx.input_mut(|i| {
+    if ui.input_mut(|i| {
         i.consume_key(Modifiers::COMMAND, Key::Y)
             || i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::Z)
     }) {
         s.redo();
     }
-    if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Z)) {
+    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Z)) {
         s.undo();
     }
 
-    if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Plus)) {
+    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Plus)) {
         s.zoom = (s.zoom / 1.1).clamp(0.05, 1.0);
     }
-    if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Minus)) {
+    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Minus)) {
         s.zoom = (s.zoom * 1.1).clamp(0.05, 1.0);
     }
-    if ctx.input_mut(|i| i.key_pressed(Key::R)) {
+    if ui.input_mut(|i| i.key_pressed(Key::R)) {
         s.zoom = 1.0;
         s.center = [0.5, 0.5].into();
     }
 
-    if ctx.input_mut(|i| i.key_pressed(Key::ArrowLeft) || i.key_pressed(Key::Comma)) {
+    if ui.input_mut(|i| i.key_pressed(Key::ArrowLeft) || i.key_pressed(Key::Comma)) {
         s.frame_number = s.frame_number.saturating_sub(1);
     }
-    if ctx.input_mut(|i| i.key_pressed(Key::ArrowRight) || i.key_pressed(Key::Period)) {
+    if ui.input_mut(|i| i.key_pressed(Key::ArrowRight) || i.key_pressed(Key::Period)) {
         s.frame_number = (s.frame_number + 1).min(s.frames_len.saturating_sub(1));
     }
 
-    if ctx.input_mut(|i| i.key_pressed(Key::I)) {
+    if ui.input_mut(|i| i.key_pressed(Key::I)) {
         s.mark_in(s.frame_number);
     }
-    if ctx.input_mut(|i| i.key_pressed(Key::O)) {
+    if ui.input_mut(|i| i.key_pressed(Key::O)) {
         s.mark_out(s.frame_number);
     }
 }
