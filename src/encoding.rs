@@ -484,7 +484,7 @@ fn encode_cdng(name: &str, video: VideoFile, state: &Mutex<EncodingState>) -> Re
     Ok(())
 }
 
-type EncData = (Vec<u8>, usize, [u16; 2]);
+type EncData = (Vec<Vec<u8>>, usize, [u16; 2]);
 
 fn encode_single_dng(
     recv: Receiver<EncData>,
@@ -506,7 +506,7 @@ fn encode_single_dng(
     let mut output = vec![0; width * height];
     while let Ok((payload, i, pan)) = recv.recv() {
         if let Err(e) = decode_image(
-            &payload,
+            &payload[0],
             &mut output,
             (video.compression, video.bits_per_pixel),
             [width, height],

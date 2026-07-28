@@ -358,7 +358,7 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
         Err(DngReaderError::FormatError(s)) => return Err(io::Error::other(s)),
         Err(DngReaderError::Other(s)) => return Err(io::Error::other(s)),
     };
-    let ifd = dng.get_ifd0();
+    let ifd = dng.first_ifd();
     let mut first_red = [0, 0];
     let mut black_level = 0.0;
     let mut white_level = None;
@@ -371,7 +371,7 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
     let err = || io::Error::other("incorrect IFD tag value type");
     let mut read_ifd = |ifd: &Ifd| {
         for entry in ifd.entries() {
-            let tag = entry.tag.numeric();
+            let tag: u16 = entry.tag.into();
             if tag == ifd::ImageWidth.tag {
                 width = entry.value.as_u32().ok_or_else(err)? as usize;
             } else if tag == ifd::ImageLength.tag {
@@ -402,6 +402,7 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
             } else if tag == ifd::BlackLevel.tag {
                 black_level = entry.value.as_u32().ok_or_else(err)? as f32 / ((1 << 16) - 1) as f32;
             } else if tag == ifd::WhiteLevel.tag {
+                dbg!(&entry.value);
                 white_level =
                     Some(entry.value.as_u32().ok_or_else(err)? as f32 / ((1 << 16) - 1) as f32);
             } else if tag == ifd::LinearizationTable.tag {
@@ -431,7 +432,7 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
     };
     read_ifd(ifd)?;
     if let Some(IfdValue::Ifd(ifd)) = ifd
-        .get_entry_by_path(&dng.main_image_data_ifd_path())
+        .entry_by_path(&dng.main_image_data_ifd_path())
         .map(|e| e.value)
     {
         read_ifd(ifd)?;
@@ -565,17 +566,45 @@ pub fn read_frames(
         let (payload, pan) = vidframes.read_ith(i);
         let upload_buffer = make_upload_buffer(video.width, video.height, allocator.clone());
         let mut output = upload_buffer.write().unwrap();
-        let extent = [video.width, video.height];
-        if let Err(e) = decode_image(
-            &payload,
-            &mut output,
-            (video.compression, video.bits_per_pixel),
-            extent,
-            &video.focus_pixels,
-            pan,
-        ) {
-            log_error(&e, &format!("decoding frame {i}"));
-        };
+
+        // let start = std::time::Instant::now();
+        // only one tile
+        if payload.len() == 1 {
+            let extent = [video.width, video.height];
+            if let Err(e) = decode_image(
+                &payload[0],
+                &mut output,
+                (video.compression, video.bits_per_pixel),
+                extent,
+                &video.focus_pixels,
+                pan,
+            ) {
+                log_error(&e, &format!("decoding frame {i}"));
+            };
+        } else {
+            let tile_width = video.width / payload.len();
+            let mut tile = vec![0; tile_width * video.height];
+            let extent = [tile_width, video.height];
+
+            for (i, p) in payload.iter().enumerate() {
+                if let Err(e) = decode_image(
+                    p,
+                    &mut tile,
+                    (video.compression, video.bits_per_pixel),
+                    extent,
+                    &video.focus_pixels,
+                    pan,
+                ) {
+                    log_error(&e, &format!("decoding frame {i}"));
+                };
+                for j in 0..video.height {
+                    output
+                        [j * video.width + i * tile_width..j * video.width + (i + 1) * tile_width]
+                        .copy_from_slice(&tile[j * tile_width..(j + 1) * tile_width]);
+                }
+            }
+        }
+        // println!("Done in {}ms.", start.elapsed().as_micros() as f64 / 1000.0);
         drop(output);
 
         // The receiver may be dropped if the file was changed meanwhile.
@@ -612,22 +641,19 @@ impl<T> Frames<T> {
 
 impl Frames<File> {
     /// Return the i-th frame and the panning coordinates, if available.
-    pub fn read_ith(&mut self, i: usize) -> (Vec<u8>, [u16; 2]) {
+    /// The frame may consist of multiple tiles.
+    pub fn read_ith(&mut self, i: usize) -> (Vec<Vec<u8>>, [u16; 2]) {
         match *self {
             Frames::Mlv(ref frames, ref mut vidfile) => {
                 let MlvVideoFrame { pos, len, pan } = frames[i];
                 vidfile.seek(SeekFrom::Start(pos)).unwrap();
                 let mut payload = vec![0; len];
                 vidfile.read_exact(&mut payload).unwrap();
-                (payload, pan)
+                (vec![payload], pan)
             }
             Frames::Dng(ref frames) => {
                 let dng = DngReader::read(File::open(&frames[i]).unwrap()).unwrap();
-                let main_ifd = dng.main_image_data_ifd_path();
-                let len = dng.needed_buffer_length_for_image_data(&main_ifd).unwrap();
-                let mut payload = vec![0u8; len];
-                dng.read_image_data_to_buffer(&main_ifd, &mut payload)
-                    .unwrap();
+                let payload = dng.main_image_data().unwrap();
                 (payload, [0, 0])
             }
         }
