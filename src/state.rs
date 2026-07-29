@@ -54,6 +54,8 @@ pub struct State {
     pub recompute: bool,
     /// egui ids of video images
     pub image_ids: Option<[TextureId; 2]>,
+    /// The textures should be reset
+    pub images_need_reset: bool,
     /// A map of focus pixels for each camera and resolution
     pub fpm: FocusPixelMap,
 
@@ -124,6 +126,11 @@ pub struct State {
 impl State {
     /// Update the app state
     pub fn update(&mut self, renderer: &mut Renderer) {
+        if self.images_need_reset {
+            self.reset_images(renderer);
+            self.images_need_reset = false;
+        }
+
         if let Some(items) = self.import_dialog.take_picked_multiple() {
             for item in items {
                 self.import_file(item);
@@ -186,14 +193,40 @@ impl State {
             };
             self.files.insert(filename, videofile);
             if switch {
-                self.change_file(renderer, switch_file);
+                self.change_file(switch_file);
             }
+        }
+
+        if let Some(new_file) = self.changed_file.take() {
+            self.update_current_file();
+            for (_, video) in self.files.iter_mut() {
+                video.selected = false;
+            }
+            self.change_file(new_file);
         }
 
         let frame_len = self.frame_start.elapsed().as_micros() as f32;
         self.frame_start = Instant::now();
         let vid_frame_len = self.vid_frame_start.elapsed().as_micros() as f32;
         let ideal_len = self.ideal_frame_len + self.frame_delta;
+
+        if self.paused && !self.compute.is_computing() && self.recompute {
+            let upload_buffer = if self.rewound_frame {
+                loop {
+                    let (upload_buffer, i) = self.recv.recv().unwrap();
+                    if i == self.frame_number {
+                        self.rewound_frame = false;
+                        break Some(upload_buffer);
+                    }
+                }
+            } else {
+                None
+            };
+
+            self.compute
+                .process(upload_buffer, !self.second_img as usize, self.pc, None);
+            self.recompute = false;
+        }
 
         if let Some(image_ids) = self.image_ids {
             if self.compute.is_signaled() {
@@ -242,24 +275,6 @@ impl State {
             }
         }
 
-        if self.paused && !self.compute.is_computing() && self.recompute {
-            let upload_buffer = if self.rewound_frame {
-                loop {
-                    let (upload_buffer, i) = self.recv.recv().unwrap();
-                    if i == self.frame_number {
-                        self.rewound_frame = false;
-                        break Some(upload_buffer);
-                    }
-                }
-            } else {
-                None
-            };
-
-            self.compute
-                .process(upload_buffer, !self.second_img as usize, self.pc, None);
-            self.recompute = false;
-        }
-
         let current_frame = self.frame_number;
 
         // Set immediate UI in redraw here
@@ -289,14 +304,6 @@ impl State {
         let time = self.first_start.elapsed().as_millis() as f64 / 1000.0;
         self.undo_color_params.feed_state(time, &self.color_params);
         self.undo_pc.add_undo(&self.pc);
-
-        if let Some(new_file) = self.changed_file.take() {
-            self.update_current_file();
-            for (_, video) in self.files.iter_mut() {
-                video.selected = false;
-            }
-            self.change_file(renderer, new_file);
-        }
 
         if current_frame != self.frame_number {
             while self.recv.try_recv().is_ok() {}
@@ -329,7 +336,7 @@ impl State {
     }
 
     /// Change the currently loaded file
-    pub fn change_file(&mut self, gui: &mut Renderer, new_file: String) {
+    pub fn change_file(&mut self, new_file: String) {
         self.filename = new_file;
         let video = self.files.get_mut(&self.filename).unwrap();
         video.selected = true;
@@ -341,6 +348,7 @@ impl State {
 
         self.frame_number = video.current_frame;
         self.recompute = true;
+        self.rewound_frame = true;
         self.frames_len = video.frames.len();
         self.trim = video.trim.clone();
         self.extent = [video.width as u32, video.height as u32];
@@ -362,6 +370,15 @@ impl State {
             self.gpu_context.clone(),
             video.lut.as_deref(),
         );
+
+        // Stretch the extent, so that the video displays correctly
+        self.extent[0] *= video.column_binning as u32;
+        self.images_need_reset = true;
+    }
+
+    /// Reset the video texture.
+    /// The caller has to ensure the previous textures are never displayed again.
+    pub fn reset_images(&mut self, gui: &mut Renderer) {
         for id in self.image_ids.iter().flatten() {
             gui.unregister_image(*id);
         }
@@ -376,9 +393,6 @@ impl State {
             )
         }));
         self.current_img = None;
-
-        // Stretch the extent, so that the video displays correctly
-        self.extent[0] *= video.column_binning as u32;
     }
 
     /// Remove the file from the file list

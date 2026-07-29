@@ -6,10 +6,14 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(set = 0, binding = 0) uniform sampler2D rawimg;
 layout(set = 0, binding = 1, rgba16) uniform writeonly image2D debayered;
 
-layout (constant_id = 0) const int X_RED = 0;
-layout (constant_id = 1) const int Y_RED = 0;
-layout (constant_id = 2) const float BLACK_LEVEL = 0.0;
-layout (constant_id = 3) const float STRETCH = 1.0;
+layout (constant_id = 0) const int DEMOSAIC = 0;
+layout (constant_id = 1) const int X_RED = 0;
+layout (constant_id = 2) const int Y_RED = 0;
+layout (constant_id = 3) const float BLACK_LEVEL = 0.0;
+layout (constant_id = 4) const float STRETCH = 1.0;
+
+const int DEMOSAIC_NONE = 0;
+const int DEMOSAIC_MHC = 1;
 
 #include "colorspaces.h"
 #include "debayer.h"
@@ -75,32 +79,41 @@ vec3 srgb_from_linear(vec3 linear) {
 void main() {
 	uvec2 pos = gl_GlobalInvocationID.xy;
 
-	const vec3 c_cam = debayer_mhc(pos) * STRETCH;
-	vec3 col_xyz = params.cam_matrix * c_cam;
-	col_xyz *= pow(2.0, params.exposure);
+	vec3 col;
+	switch (DEMOSAIC) {
+	case DEMOSAIC_NONE:
+		col = vec3(texture(rawimg, pos).r);
+		break;
+	case DEMOSAIC_MHC:
+		col = debayer_mhc(pos);
+		break;
+	}
+	col *= STRETCH * pow(2.0, params.exposure);
 
-	vec3 jch = xyY_to_dt_UCS_JCH(XYZ_to_xyY(col_xyz), 1.0);
-	if (isinf(params.saturation_global)) {
- 		jch.y = 0.0;
- 	} else {
-		const vec3 opacity = opacity_masks(jch.x, 1.0, 1.0, 1.0, 0.1845);
-		vec3 hcb = dt_UCS_JCH_to_HCB(jch);
-    		const vec2 sincos = normalize(hcb.yz);
-		const vec3 saturation_local = vec3(params.saturation_shd, params.saturation_mid, params.saturation_hig);
-		const float a = params.saturation_global + dot(saturation_local, opacity);
-		const vec2 pw = vec2(a * hcb.y, sincos.x * hcb.y + sincos.y * hcb.z);
-		const mat2 inv = mat2(sincos.y, -sincos.x, sincos);
-		jch = dt_UCS_HCB_to_JCH(vec3(hcb.x, inv * pw));
- 	}
-	const vec3 col0 = xyz_to_rec2020 * xyY_to_XYZ(dt_UCS_JCH_to_xyY(jch, 1.0));
-	// const vec3 col0 = xyz_to_rec2020 * col_xyz;
+	if (DEMOSAIC != DEMOSAIC_NONE) {
+		vec3 col_xyz = params.cam_matrix * col;
+		vec3 jch = xyY_to_dt_UCS_JCH(XYZ_to_xyY(col_xyz), 1.0);
+		if (isinf(params.saturation_global)) {
+			jch.y = 0.0;
+		} else {
+			const vec3 opacity = opacity_masks(jch.x, 1.0, 1.0, 1.0, 0.1845);
+			vec3 hcb = dt_UCS_JCH_to_HCB(jch);
+			const vec2 sincos = normalize(hcb.yz);
+			const vec3 saturation_local = vec3(params.saturation_shd, params.saturation_mid, params.saturation_hig);
+			const float a = params.saturation_global + dot(saturation_local, opacity);
+			const vec2 pw = vec2(a * hcb.y, sincos.x * hcb.y + sincos.y * hcb.z);
+			const mat2 inv = mat2(sincos.y, -sincos.x, sincos);
+			jch = dt_UCS_HCB_to_JCH(vec3(hcb.x, inv * pw));
+		}
+		col = xyz_to_rec2020 * xyY_to_XYZ(dt_UCS_JCH_to_xyY(jch, 1.0));
+	}
 
 	//float norm = max(max(col0.r, col0.g), col0.b);
 	//norm = clamp(norm, 0.18*pow(2., -6), 0.18*pow(2., 5.2));
 	//vec3 ratios = col0 / norm;
 
 	//norm = log_tonemapping(norm, 0.18, params.black_re, params.white_re - params.black_re);
-	vec3 col1 = log_tonemapping(col0, 0.18, params.black_re, params.white_re - params.black_re);
+	vec3 col1 = log_tonemapping(col, 0.18, params.black_re, params.white_re - params.black_re);
 
 	float c = params.contrast;
 	float sl = 6.0/11.2, tl = sl;
@@ -136,7 +149,7 @@ void main() {
 	col1.z = scurve(col1.z, c, tc, sc, sl, tl);
 	col1 = pow(col1, vec3(2.2));
 
-	vec3 ych0 = rec2020_to_Ych(col0);
+	vec3 ych0 = rec2020_to_Ych(col);
 	vec3 ych1 = rec2020_to_Ych(col1);
 	ych1 = vec3(ych1.x, min(ych0.y, ych1.y), ych0.z);
 	col1 = Ych_to_rec2020(ych1);

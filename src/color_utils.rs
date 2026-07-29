@@ -235,6 +235,7 @@ pub const fn inv3(m: Mat<3>) -> Mat<3> {
     }
     let det = m[0][0] * inv[0][0] + m[0][1] * inv[1][0] + m[0][2] * inv[2][0];
 
+    let mut i = 0;
     while i < 3 {
         let mut j = 0;
         while j < 3 {

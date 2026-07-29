@@ -1,5 +1,6 @@
 use crate::color_utils::Illuminant;
 use crate::encoding::{ParamValue, Recipe};
+use crate::gpu_compute::DemosaicMethod;
 use crate::state::{ERROR_LOG, State};
 
 use egui::load::SizedTexture;
@@ -122,81 +123,85 @@ pub fn layout(s: &mut State, ui: &mut Ui) {
                     .text("exposure")
                     .step_by(0.1),
             );
-            ComboBox::from_label("illuminant")
-                .selected_text(s.color_params.illuminant.description())
-                .show_ui(ui, |ui| {
-                    for illuminant in Illuminant::defaults() {
-                        ui.selectable_value(
-                            &mut s.color_params.illuminant,
-                            illuminant,
-                            illuminant.description(),
+
+            if s.compute.specialization().demosaic != DemosaicMethod::None {
+                ComboBox::from_label("illuminant")
+                    .selected_text(s.color_params.illuminant.description())
+                    .show_ui(ui, |ui| {
+                        for illuminant in Illuminant::defaults() {
+                            ui.selectable_value(
+                                &mut s.color_params.illuminant,
+                                illuminant,
+                                illuminant.description(),
+                            );
+                        }
+                    });
+                match s.color_params.illuminant {
+                    Illuminant::A => {}
+                    Illuminant::D(ref mut b) => {
+                        ui.add(
+                            Slider::new(b, 3000..=7000)
+                                .text("temerature (K)")
+                                .step_by(1.0),
                         );
                     }
+                    Illuminant::Blackbody(ref mut b) => {
+                        ui.add(
+                            Slider::new(b, 3000..=7000)
+                                .text("temerature (K)")
+                                .step_by(1.0),
+                        );
+                    }
+                    Illuminant::Custom(ref mut ch) => {
+                        ui.add(
+                            Slider::new(&mut ch[1], -PI..=PI)
+                                .text("hue")
+                                .custom_formatter(|n, _| format!("{:.3}°", n * 180.0 / PI as f64))
+                                .step_by(0.01),
+                        );
+                        ui.add(
+                            Slider::new(&mut ch[0], 0.0..=0.3)
+                                .text("chroma")
+                                .step_by(0.01),
+                        );
+                    }
+                }
+                ui.horizontal(|ui| {
+                    let [r, g, b] = s.color_params.illuminant.srgb();
+                    color_rect(ui, Rgba::from_rgb(r, g, b).into());
+                    if ui.add(Button::new("Pick white")).clicked() {
+                        s.picker_mode = true;
+                        ui.set_cursor_icon(CursorIcon::Crosshair);
+                    }
                 });
-            match s.color_params.illuminant {
-                Illuminant::A => {}
-                Illuminant::D(ref mut b) => {
+
+                ui.separator();
+
+                ui.heading("saturation");
+                ui.checkbox(&mut s.color_params.monochrome, "Monochromatic");
+                if !s.color_params.monochrome {
                     ui.add(
-                        Slider::new(b, 3000..=7000)
-                            .text("temerature (K)")
-                            .step_by(1.0),
-                    );
-                }
-                Illuminant::Blackbody(ref mut b) => {
-                    ui.add(
-                        Slider::new(b, 3000..=7000)
-                            .text("temerature (K)")
-                            .step_by(1.0),
-                    );
-                }
-                Illuminant::Custom(ref mut ch) => {
-                    ui.add(
-                        Slider::new(&mut ch[1], -PI..=PI)
-                            .text("hue")
-                            .custom_formatter(|n, _| format!("{:.3}°", n * 180.0 / PI as f64))
+                        Slider::new(&mut s.color_params.saturation_global, -0.5..=0.5)
+                            .text("global")
                             .step_by(0.01),
                     );
                     ui.add(
-                        Slider::new(&mut ch[0], 0.0..=0.3)
-                            .text("chroma")
+                        Slider::new(&mut s.pc.saturation_shd, -0.5..=0.5)
+                            .text("shadows")
+                            .step_by(0.01),
+                    );
+                    ui.add(
+                        Slider::new(&mut s.pc.saturation_mid, -0.5..=0.5)
+                            .text("midtones")
+                            .step_by(0.01),
+                    );
+                    ui.add(
+                        Slider::new(&mut s.pc.saturation_hig, -0.5..=0.5)
+                            .text("highlights")
                             .step_by(0.01),
                     );
                 }
             }
-            ui.horizontal(|ui| {
-                let [r, g, b] = s.color_params.illuminant.srgb();
-                color_rect(ui, Rgba::from_rgb(r, g, b).into());
-                if ui.add(Button::new("Pick white")).clicked() {
-                    s.picker_mode = true;
-                    ui.set_cursor_icon(CursorIcon::Crosshair);
-                }
-            });
-            ui.separator();
-
-            ui.heading("saturation");
-            ui.add_enabled_ui(!s.color_params.monochrome, |ui| {
-                ui.add(
-                    Slider::new(&mut s.color_params.saturation_global, -0.5..=0.5)
-                        .text("global")
-                        .step_by(0.01),
-                );
-                ui.add(
-                    Slider::new(&mut s.pc.saturation_shd, -0.5..=0.5)
-                        .text("shadows")
-                        .step_by(0.01),
-                );
-                ui.add(
-                    Slider::new(&mut s.pc.saturation_mid, -0.5..=0.5)
-                        .text("midtones")
-                        .step_by(0.01),
-                );
-                ui.add(
-                    Slider::new(&mut s.pc.saturation_hig, -0.5..=0.5)
-                        .text("highlights")
-                        .step_by(0.01),
-                );
-            });
-            ui.checkbox(&mut s.color_params.monochrome, "Monochromatic");
             ui.separator();
 
             ui.heading("tone mapping");

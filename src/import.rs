@@ -23,7 +23,7 @@ use std::sync::{
 };
 
 use crate::color_utils::{ColorParams, Illuminant, array_to_mat3, identity_mat, inv3, transpose};
-use crate::gpu_compute::{PushConstantData, Specialization, make_upload_buffer};
+use crate::gpu_compute::{DemosaicMethod, PushConstantData, Specialization, make_upload_buffer};
 use crate::state::log_error;
 
 /// Video file
@@ -192,6 +192,7 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
     let mut camera = 0;
     let mut bits_per_pixel = 14;
     let fps: f32 = header.fps.into();
+    let mut demosaic = Default::default();
 
     let mut video_start = 0;
     let mut audio_start = 0;
@@ -217,6 +218,9 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
                 raw_w = ri.width;
                 raw_h = ri.height;
                 bits_per_pixel = ri.bits_per_pixel as u8;
+                if ri.cfa_pattern == 0 {
+                    demosaic = DemosaicMethod::None;
+                }
 
                 raw_info = Some(ri);
 
@@ -289,6 +293,7 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
 
     let stretch = 1.0 / (white_level - black_level);
     let spec = Specialization {
+        demosaic,
         first_red: [0, 0],
         black_level,
         stretch,
@@ -334,6 +339,9 @@ pub fn parse_mlv(path: &Path, fpm: FocusPixelMap) -> Result<VideoFile, io::Error
     })
 }
 
+/// EXIF calibration illuminant value
+const ILLUMINANT_D65: u32 = 21;
+
 /// Parse a CinemaDNG directory
 pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
     let mut entries: Vec<_> = fs::read_dir(path)?
@@ -362,12 +370,14 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
     let mut first_red = [0, 0];
     let mut black_level = 0.0;
     let mut white_level = None;
-    let mut cam_matrix = identity_mat::<3>();
+    let [mut cam_matrix1, mut cam_matrix2] = [identity_mat::<3>(); 2];
+    let [mut illum1, mut illum2] = [0; 2];
     let (mut width, mut height) = (0, 0);
     let mut fps = 24.0;
     let mut bits_per_pixel = 14;
     let mut compression = Compression::None(true);
     let mut lut = None;
+    let mut demosaic = Default::default();
     let err = || io::Error::other("incorrect IFD tag value type");
     let mut read_ifd = |ifd: &Ifd| {
         for entry in ifd.entries() {
@@ -413,6 +423,19 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
                     .map(|v| v as u16)
                     .collect();
                 lut = Some(l);
+            } else if tag == ifd::ColorMatrix1.tag {
+                println!("matrix found");
+                let cm: Vec<_> = entry
+                    .value
+                    .as_list()
+                    .filter_map(|v| v.as_f64())
+                    .map(|v| v as f32)
+                    .collect();
+                if let Ok(mat) = cm.try_into() {
+                    cam_matrix1 = transpose(inv3(array_to_mat3(mat)));
+                } else {
+                    eprintln!("Warning: camera matrix has invalid size; skipping")
+                }
             } else if tag == ifd::ColorMatrix2.tag {
                 println!("matrix found");
                 let cm: Vec<_> = entry
@@ -422,9 +445,17 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
                     .map(|v| v as f32)
                     .collect();
                 if let Ok(mat) = cm.try_into() {
-                    cam_matrix = transpose(inv3(array_to_mat3(mat)));
+                    cam_matrix2 = transpose(inv3(array_to_mat3(mat)));
                 } else {
                     eprintln!("Warning: camera matrix has invalid size; skipping")
+                }
+            } else if tag == ifd::CalibrationIlluminant1.tag {
+                illum1 = entry.value.as_u32().ok_or_else(err)?;
+            } else if tag == ifd::CalibrationIlluminant2.tag {
+                illum2 = entry.value.as_u32().ok_or_else(err)?;
+            } else if tag == ifd::PhotometricInterpretation.tag {
+                if let Some(1) = entry.value.as_u32() {
+                    demosaic = DemosaicMethod::None;
                 }
             }
         }
@@ -441,9 +472,19 @@ pub fn parse_cdng(path: &Path) -> Result<VideoFile, io::Error> {
     let white_level = white_level.unwrap_or(((1 << bits_per_pixel) as f32) / ((1 << 16) as f32));
     let stretch = 1.0 / (white_level - black_level);
     let spec = Specialization {
+        demosaic,
         first_red,
         black_level,
         stretch,
+    };
+    let cam_matrix = if illum2 == ILLUMINANT_D65 {
+        cam_matrix2
+    } else if illum1 == ILLUMINANT_D65 {
+        cam_matrix1
+    } else if illum2 != 0 {
+        cam_matrix2
+    } else {
+        cam_matrix1
     };
     let color_params = ColorParams {
         cam_matrix,

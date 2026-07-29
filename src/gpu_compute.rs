@@ -64,9 +64,21 @@ pub struct PushConstantData {
     pub contrast: f32,
 }
 
+/// Demosaicing algorith to use
+#[derive(Debug, Default, Copy, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub enum DemosaicMethod {
+    /// No demosaicing
+    None = 0,
+    /// Malvar-He-Cutler linear
+    #[default]
+    MalvarHeCutler = 1,
+}
+
 /// Compute shader specialization constants
 #[derive(Clone, Copy, Deserialize, Serialize)]
 pub struct Specialization {
+    /// Demosaic method to use
+    pub demosaic: DemosaicMethod,
     /// Coordinates of the first red pixel
     pub first_red: [u16; 2],
     /// Subtract this value from each pixel
@@ -418,6 +430,11 @@ impl Compute {
             cols[blue],
         ]))
     }
+
+    /// Get the specialization data
+    pub fn specialization(&self) -> &Specialization {
+        &self.specialization
+    }
 }
 
 /// Create an upload buffer
@@ -467,10 +484,11 @@ pub fn make_output_buffer(
 impl Specialization {
     fn make_const_map(&self) -> HashMap<u32, SpecializationConstant> {
         let mut map = HashMap::new();
-        map.insert(0, SpecializationConstant::I32(self.first_red[0] as i32));
-        map.insert(1, SpecializationConstant::I32(self.first_red[1] as i32));
-        map.insert(2, SpecializationConstant::F32(self.black_level));
-        map.insert(3, SpecializationConstant::F32(self.stretch));
+        map.insert(0, SpecializationConstant::I32(self.demosaic as i32));
+        map.insert(1, SpecializationConstant::I32(self.first_red[0] as i32));
+        map.insert(2, SpecializationConstant::I32(self.first_red[1] as i32));
+        map.insert(3, SpecializationConstant::F32(self.black_level));
+        map.insert(4, SpecializationConstant::F32(self.stretch));
         map
     }
 }
@@ -478,6 +496,7 @@ impl Specialization {
 impl Default for Specialization {
     fn default() -> Self {
         Specialization {
+            demosaic: Default::default(),
             first_red: [0, 0],
             black_level: 0.0,
             stretch: 1.0,

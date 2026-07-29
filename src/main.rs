@@ -268,6 +268,7 @@ fn main() -> Result<(), impl Error> {
         undo_pc: Default::default(),
         compute,
         image_ids: None,
+        images_need_reset: false,
         fpm,
 
         cmd_send,
@@ -386,7 +387,7 @@ impl ApplicationHandler for App {
             depth_range: 0.0..=1.0,
         };
 
-        let mut renderer = Renderer::new(
+        let renderer = Renderer::new(
             event_loop,
             surface.clone(),
             self.graphics_queue.clone(),
@@ -400,8 +401,7 @@ impl ApplicationHandler for App {
         // Register the output images to the GUI
         if !self.state.filename.is_empty() {
             self.state.update_current_file();
-            self.state
-                .change_file(&mut renderer, self.state.filename.clone());
+            self.state.change_file(self.state.filename.clone());
         }
 
         self.rcx = Some(RenderingContext {
