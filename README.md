@@ -1,4 +1,4 @@
-<img src="logo.png" alt="logo" width="200"/>
+<img src="https://files.grego.site/kinochrome.png" alt="logo" width="200"/>
 
 GPU accelerated raw video processing
 
